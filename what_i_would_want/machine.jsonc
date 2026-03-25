@@ -1,0 +1,21 @@
+{
+    // the default register would be usize, no special properties, etc.
+    // at least one RIP/PC-like register must be registered
+    "registers": {
+        "a": null,
+        "b": null,
+        "c": null,
+        "d": null,
+        "sp": {
+            "attribute": "sp",
+        },
+        "pc": {
+            "attribute": "pc",
+        },
+        "flags": {
+            "attribute": "flags",
+            "deserialization": "deserialize_flags", // this is a python function, will panic during runtime if not found!
+        },
+    },
+    "memory_size": null, // default is unlimited, grows as program runs, should either be a number or empty object
+}
