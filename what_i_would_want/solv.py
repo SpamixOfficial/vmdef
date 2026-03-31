@@ -10,7 +10,7 @@ def callback_1(em):
 
 data = open("vmdata.bin", "rb").read()
 
-m = machine.init(d="machine.jsonc", impl="machine.py")
+m = machine.init(d="machine.jsonc", i="machine.py")
 
 print(m.disassemble(data=data))
 

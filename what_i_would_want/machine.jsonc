@@ -1,5 +1,5 @@
 {
-    // the default register would be usize, no special properties, etc.
+    // the default register would be usize in size, no special properties, etc.
     // at least one RIP/PC-like register must be registered
     "registers": {
         "a": null,
@@ -22,4 +22,8 @@
         "data": "0x0..0x1000", // specify as range (separated by ..), will be interpreted by rust
         "memory": "0x1000..",
     },*/
+    "instruction": {
+        "op_size": 8, // in bits, null means variable and a custom decoder will be necessary
+    },
+    "little_endian": true // doesn't really matter in our case since every piece of data is one byte
 }

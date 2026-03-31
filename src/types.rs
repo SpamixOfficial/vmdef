@@ -1,12 +1,23 @@
 use anyhow::{Result, anyhow};
-use pyo3::{Py, types::PyFunction};
+use bytes::{Buf, Bytes};
+use pyo3::{IntoPyObject, Py, pyclass, types::PyFunction};
 use serde::{Deserialize, Deserializer};
-use std::{collections::HashMap, ops::Range};
+use std::{
+    collections::{BTreeMap, HashMap},
+    ops::Range,
+};
 
+#[pyclass]
 pub struct Machine {
     pub config: MachineConfig,
     pub ops: HashMap<usize, OpHandler>,
+    pub arg_handlers: BTreeMap<String, ArgHandler>, // <Name,HandlerObj>
+    pub arg_formatter: ArgFormatter,
+    pub primary_args_handler: String,
 }
+
+pub struct ArgHandler(pub Py<PyFunction>);
+pub struct ArgFormatter(pub Py<PyFunction>);
 
 pub struct OpHandler {
     pub func: Py<PyFunction>,
@@ -22,13 +33,20 @@ pub struct MachineConfig {
     #[serde(default)]
     #[serde(deserialize_with = "deserialize_range_hashmap")]
     pub memory_layout: HashMap<String, Range<usize>>,
+    pub instruction: InstructionConfig,
+    pub little_endian: bool
+}
+
+#[derive(Deserialize, Debug)]
+pub struct InstructionConfig {
+    pub op_size: Option<usize>, // if None custom decoder will be enforced
 }
 
 #[derive(Deserialize, Debug)]
 pub struct Register {
     #[serde(default = "RegisterAttribute::no_attribute")]
     pub attribute: RegisterAttribute,
-    pub size: u8, // max is sizeof(usize)
+    pub size: u8, // size in bits, max is sizeof(usize)
 }
 
 #[derive(Deserialize, Debug)]
@@ -68,10 +86,18 @@ where
     return Ok(res);
 }
 
+/// A ParserArg populated with a value, to be passed onto arg handlers and prettifier
+#[derive(IntoPyObject, Clone)]
+pub struct PopulatedArg {
+    pub t: ParserArgType,
+    pub arg_val: Vec<u8>,
+}
+
+#[derive(Clone)]
 pub struct ParserArg {
     pub t: ParserArgType,
     pub direction: ParserArgDirection,
-    pub addr_size: u16,
+    pub arg_size: u16,
 }
 
 impl ParserArg {
@@ -109,9 +135,10 @@ impl ParserArg {
         return Ok(Self {
             t,
             direction: d,
-            addr_size: s[num_start..].parse::<u16>()?,
+            arg_size: s[num_start..].parse::<u16>()?,
         });
     }
+
     pub fn as_string(&self) -> String {
         let mut res: String = String::new();
         res.push(match self.t {
@@ -123,11 +150,19 @@ impl ParserArg {
             ParserArgDirection::Destination => 'd',
             _ => 's',
         });
-        res + &self.addr_size.to_string()
+        res + &self.arg_size.to_string()
+    }
+
+    /// Populate the argument
+    pub fn populate(&self, buf: &Bytes) -> PopulatedArg {
+        let mut b = Vec::with_capacity(self.arg_size as usize);
+        b.copy_from_slice(&buf[..(self.arg_size as usize)]);
+        PopulatedArg { t: self.t, arg_val: b }
     }
 }
 
-#[derive(PartialEq)]
+#[pyclass(eq, eq_int, from_py_object, name = "ArgType")]
+#[derive(PartialEq, Clone, Copy)]
 pub enum ParserArgType {
     None,
     Register,
@@ -135,7 +170,7 @@ pub enum ParserArgType {
     Immediate,
     //Other(String) //TODO: Add ability to define custom ParserArgTypes
 }
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 pub enum ParserArgDirection {
     None,
     Source,

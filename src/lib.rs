@@ -1,5 +1,6 @@
 mod types;
 mod machine;
+mod utils;
 
 use pyo3::prelude::*;
 
@@ -13,4 +14,10 @@ mod vmdef {
     fn sum_as_string(a: usize, b: usize) -> PyResult<String> {
         Ok((a + b).to_string())
     }
+
+    #[pymodule_export]
+    use crate::types::ParserArgType;
+
+    #[pymodule_export]
+    use crate::types::Machine;
 }
