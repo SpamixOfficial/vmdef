@@ -1,3 +1,5 @@
+from vmdef import op
+
 # by default the args handler is the one you registered as the default
 # you can specify a custom one with the "args_handler" parameter
 #

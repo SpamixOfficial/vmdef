@@ -14,8 +14,12 @@
         },
         "flags": {
             "attribute": "flags",
-            "deserialization": "deserialize_flags", // this is a python function, will panic during runtime if not found!
         },
     },
     "memory_size": null, // default is unlimited, grows as program runs, should either be a number or empty object
+    /*"memory_layout": { // this is not needed for the reactor_vm
+        // if your VM does not have a memory layout you can just leave this unspecified, just remember that it aids in disassembly interpretation
+        "data": "0x0..0x1000", // specify as range (separated by ..), will be interpreted by rust
+        "memory": "0x1000..",
+    },*/
 }
