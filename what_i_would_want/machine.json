@@ -1,0 +1,22 @@
+{
+    "registers": {
+        "a": null,
+        "b": null,
+        "c": null,
+        "d": null,
+        "sp": {
+            "attribute": "sp"
+        },
+        "pc": {
+            "attribute": "pc"
+        },
+        "flags": {
+            "attribute": "flags"
+        }
+    },
+    "memory_size": null,
+    "instruction": {
+        "op_size": 8
+    },
+    "little_endian": true
+}

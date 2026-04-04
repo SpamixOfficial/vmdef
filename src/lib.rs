@@ -1,6 +1,7 @@
 mod types;
 mod machine;
 mod utils;
+mod pydefine;
 
 use pyo3::prelude::*;
 
@@ -20,4 +21,7 @@ mod vmdef {
 
     #[pymodule_export]
     use crate::types::Machine;
+
+    #[pymodule_export]
+    use crate::pydefine::PyDefine;
 }

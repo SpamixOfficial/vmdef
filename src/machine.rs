@@ -1,18 +1,19 @@
-use std::{fs, path::PathBuf};
+use std::{ffi::CString, fs, path::PathBuf};
 
 use anyhow::{Result, anyhow};
 use bytes::{Buf, Bytes};
 use pyo3::{
-    Py, PyAny, PyResult, Python,
+    Bound, Py, PyAny, PyResult, Python,
     exceptions::PyException,
     pymethods,
-    types::{PyDict, PyDictMethods},
+    types::{PyAnyMethods, PyDict, PyDictMethods, PyFunction, PyModule},
 };
 
 use crate::{
     function, option_to_res,
-    types::{ArgFormatter, ArgHandler, Machine, MachineConfig, OpHandler, PopulatedArg},
-    unwrap_or,
+    pydefine::PyDefine,
+    types::{ArgFormatter, ArgHandler, Define, Machine, MachineConfig, OpHandler, PopulatedArg},
+    unwrap_or, vmdef,
 };
 
 impl OpHandler {
@@ -50,6 +51,7 @@ impl ArgFormatter {
             Python::try_attach(|py| -> Result<Vec<String>> {
                 let kwargs = PyDict::new(py);
                 kwargs.set_item("args", inp.clone())?;
+                // TODO: Add rad parameter
                 let res: Vec<String> = self.0.call(py, (inp,), Some(&kwargs))?.extract(py)?;
                 Ok(res)
             }),
@@ -65,8 +67,17 @@ impl Machine {
     ///
     /// **This function will consume the buffer**
     pub fn next_disassemble(&self, mut buf: Bytes) -> Result<(usize, String)> {
+        if self.define.arg_formatter.is_none() {
+            return Err(anyhow!(
+                "Cannot disassemble without an arg_formatter\n\nTip: Register one with @define.arg_formatter in your .py file!"
+            ));
+        }
         let op = buf.get_u8();
-        let op_item = option_to_res!(self.ops.get(&(op as usize)), "opcode {} not found", op)?;
+        let op_item = option_to_res!(
+            self.define.ops.get(&(op as usize)),
+            "opcode {} not found",
+            op
+        )?;
 
         let mut len = 1;
         let mut populated_args: Vec<PopulatedArg> = vec![];
@@ -78,7 +89,12 @@ impl Machine {
         let formatted = format!(
             "{} {}",
             op_item.op_name,
-            self.arg_formatter.execute(populated_args)?.join(",")
+            self.define
+                .arg_formatter
+                .as_ref()
+                .unwrap()
+                .execute(populated_args)?
+                .join(",")
         );
 
         Ok((len, formatted))
@@ -89,20 +105,37 @@ impl Machine {
 impl Machine {
     #[staticmethod]
     pub fn init(d: PathBuf, i: PathBuf) -> PyResult<Self> {
-        let config: MachineConfig = serde_json::from_str(&fs::read_to_string(d)?).map_err(|e| {
+        let config: MachineConfig = serde_json::from_str(&fs::read_to_string(d)?).map_err(|x| {
             PyException::new_err(format!(
-                "{} - Failed to parse JSON config file: {}",
+                "{} - could not read machine config: {}",
                 function!(),
-                e
+                x.to_string()
             ))
         })?;
 
-        Machine {
-            config,
-            ops: (),
-            arg_handlers: (),
-            arg_formatter: (),
-            primary_args_handler: (),
-        }
+        //pyo3::append_to_inittab!(vmdef);
+        let code = fs::read_to_string(i)?;
+        let define = Python::attach(|py| -> PyResult<Define> {
+            let module = PyModule::from_code(
+                py,
+                CString::new(code)?.as_c_str(),
+                c"machine.py",
+                c"machine",
+            )?;
+            let load = module.getattr("load")?;
+
+            let extracted: Bound<'_, PyDefine> = load.call0()?.extract()?;
+            let mut borrowed = extracted.borrow_mut();
+
+            Ok(Define {
+                ops: std::mem::take(&mut borrowed.ops), // clone is impossible as all fields contain pointers to Py<PyFunction>
+                arg_handler: std::mem::take(&mut borrowed.arg_handler),
+                arg_formatter: std::mem::take(&mut borrowed.arg_formatter),
+            })
+        })?;
+        
+        dbg!(&config, &define);
+
+        Ok(Machine { config, define })
     }
 }

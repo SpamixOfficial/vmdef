@@ -1,40 +1,58 @@
 use anyhow::{Result, anyhow};
-use bytes::{Buf, Bytes};
-use pyo3::{IntoPyObject, Py, pyclass, types::PyFunction};
+use bytes::Bytes;
+use pyo3::{FromPyObject, IntoPyObject, Py, pyclass, types::PyFunction};
 use serde::{Deserialize, Deserializer};
-use std::{
-    collections::{BTreeMap, HashMap},
-    ops::Range,
-};
+use serde_with::{DefaultOnNull, serde_as};
+use std::{collections::HashMap, ops::Range};
 
-#[pyclass]
+pub type OpMap = HashMap<usize, OpHandler>;
+
+#[pyclass(name = "machine")]
 pub struct Machine {
     pub config: MachineConfig,
-    pub ops: HashMap<usize, OpHandler>,
-    pub arg_handlers: BTreeMap<String, ArgHandler>, // <Name,HandlerObj>
-    pub arg_formatter: ArgFormatter,
-    pub primary_args_handler: String,
+    pub define: Define,
 }
 
+// This is the owned final type of the Define Python API
+//#[pyclass]
+
+#[derive(Debug)]
+pub struct Define {
+    pub ops: OpMap,
+    pub arg_handler: Option<ArgHandler>,
+    pub arg_formatter: Option<ArgFormatter>,
+    //pub primary_args_handler: String,
+}
+
+#[derive(Debug)]
 pub struct ArgHandler(pub Py<PyFunction>);
+
+#[derive(Debug)]
 pub struct ArgFormatter(pub Py<PyFunction>);
 
+#[derive(Debug)]
 pub struct OpHandler {
     pub func: Py<PyFunction>,
     pub parser_args: Vec<ParserArg>,
     pub op_name: String,
-    pub args_handler: Py<PyFunction>,
 }
 
+#[serde_as]
 #[derive(Deserialize, Debug)]
 pub struct MachineConfig {
+    #[serde_as(as = "DefaultOnNull<HashMap<_, DefaultOnNull<_>>>")]
     pub registers: HashMap<String, Register>,
+
     pub memory_size: Option<usize>, // upper size limit for memory vector, None just lets it grow continuously
+
     #[serde(default)]
     #[serde(deserialize_with = "deserialize_range_hashmap")]
     pub memory_layout: HashMap<String, Range<usize>>,
     pub instruction: InstructionConfig,
-    pub little_endian: bool
+
+    #[serde_as(as = "DefaultOnNull")]
+    #[serde(default = "default_true")]
+    pub little_endian: bool,
 }
 
 #[derive(Deserialize, Debug)]
@@ -42,32 +60,38 @@ pub struct InstructionConfig {
     pub op_size: Option<usize>, // if None custom decoder will be enforced
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Default)]
+#[serde_as]
 pub struct Register {
-    #[serde(default = "RegisterAttribute::no_attribute")]
+    #[serde(default)]
+    #[serde_as(as = "DefaultOnNull")]
     pub attribute: RegisterAttribute,
+
+    #[serde(default)]
+    #[serde_as(as = "DefaultOnNull")]
     pub size: u8, // size in bits, max is sizeof(usize)
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Default)]
+#[serde(rename_all = "lowercase")]
 pub enum RegisterAttribute {
+    #[default]
     None,
     Sp, // StackPointer
     Pc, // ProgramCounter
     Flags,
 }
 
-impl RegisterAttribute {
-    fn no_attribute() -> Self {
-        RegisterAttribute::None
-    }
-}
-
 pub fn deserialize_range_hashmap<'de, D>(d: D) -> Result<HashMap<String, Range<usize>>, D::Error>
 where
     D: Deserializer<'de>,
 {
-    let map: HashMap<String, String> = HashMap::deserialize(d)?;
+    let opt: Option<HashMap<String, String>> = Option::<HashMap<String, String>>::deserialize(d)?;
+    if opt.is_none() {
+        return Ok(HashMap::default());
+    }
+
+    let map = opt.unwrap();
     let mut res = HashMap::with_capacity(map.len());
 
     for (key, val) in map {
@@ -86,6 +110,10 @@ where
     return Ok(res);
 }
 
+pub fn default_true() -> bool {
+    true
+}
+
 /// A ParserArg populated with a value, to be passed onto arg handlers and prettifier
 #[derive(IntoPyObject, Clone)]
 pub struct PopulatedArg {
@@ -93,7 +121,7 @@ pub struct PopulatedArg {
     pub arg_val: Vec<u8>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ParserArg {
     pub t: ParserArgType,
     pub direction: ParserArgDirection,
@@ -157,12 +185,15 @@ impl ParserArg {
     pub fn populate(&self, buf: &Bytes) -> PopulatedArg {
         let mut b = Vec::with_capacity(self.arg_size as usize);
         b.copy_from_slice(&buf[..(self.arg_size as usize)]);
-        PopulatedArg { t: self.t, arg_val: b }
+        PopulatedArg {
+            t: self.t,
+            arg_val: b,
+        }
     }
 }
 
 #[pyclass(eq, eq_int, from_py_object, name = "ArgType")]
-#[derive(PartialEq, Clone, Copy)]
+#[derive(PartialEq, Clone, Copy, Debug)]
 pub enum ParserArgType {
     None,
     Register,
@@ -170,7 +201,7 @@ pub enum ParserArgType {
     Immediate,
     //Other(String) //TODO: Add ability to define custom ParserArgTypes
 }
-#[derive(PartialEq, Clone)]
+#[derive(PartialEq, Clone, Debug)]
 pub enum ParserArgDirection {
     None,
     Source,
