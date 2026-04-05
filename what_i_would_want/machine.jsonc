@@ -7,14 +7,14 @@
         "c": null,
         "d": null,
         "sp": {
-            "attribute": "sp",
+            "attribute": "sp"
         },
         "pc": {
-            "attribute": "pc",
+            "attribute": "pc"
         },
         "flags": {
-            "attribute": "flags",
-        },
+            "attribute": "flags"
+        }
     },
     "memory_size": null, // default is unlimited, grows as program runs, should either be a number or empty object
     /*"memory_layout": { // this is not needed for the reactor_vm
@@ -23,7 +23,8 @@
         "memory": "0x1000..",
     },*/
     "instruction": {
-        "op_size": 8, // in bits, null means variable and a custom decoder will be necessary
+        "op_size": 2 // in bytes, null means variable and a custom decoder will be necessary
     },
-    "little_endian": true // doesn't really matter in our case since every piece of data is one byte
+    "little_endian": true, // doesn't really matter in our case since every piece of data is one byte
+    "implementation": "machine.py" // this can be overwritten in machine.init, at least one should be present!
 }

@@ -5,13 +5,14 @@ use pyo3::types::{PyAnyMethods, PyFunction};
 use pyo3::{Py, PyResult};
 use pyo3::{Python, pyclass, pymethods};
 
-use crate::types::{ArgFormatter, ArgHandler, Define, OpHandler, OpMap, ParserArg};
+use crate::types::{ArgFormatter, ArgHandler, Disassembler, OpHandler, OpMap, ParserArg};
 
 #[pyclass(name = "define")]
 pub struct PyDefine {
     pub ops: OpMap,
     pub arg_handler: Option<ArgHandler>,
     pub arg_formatter: Option<ArgFormatter>,
+    pub disassembler: Option<Disassembler>
 }
 
 #[pymethods]
@@ -22,6 +23,7 @@ impl PyDefine {
             ops: HashMap::new(),
             arg_handler: Option::None,
             arg_formatter: Option::None,
+            disassembler: Option::None
             //primary_args_handler: String::new(),
         }
     }
@@ -89,6 +91,7 @@ impl OpDecorator {
                 func: func.clone_ref(py),
                 op_name,
                 parser_args,
+                rad: self.rad.clone()
             };
             s.ops.insert(self.code, handler);
 

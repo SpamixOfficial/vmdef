@@ -24,3 +24,21 @@ macro_rules! unwrap_or {
         $f.unwrap_or(Err(anyhow!("{} - {}", function!(), format!($($x),*))))
     };
 }
+
+#[macro_export]
+macro_rules! buf_as_usize {
+    ($b:expr) => {{
+        let mut as_usize = [0u8; size_of::<usize>()];
+        as_usize[..max($b.len(), size_of::<usize>())]
+            .copy_from_slice(&$b[..max($b.len(), size_of::<usize>())]);
+
+        usize::from_le_bytes(as_usize)
+    }};
+    ($b:expr, $l:expr) => {{
+        let mut as_usize = [0u8; size_of::<usize>()];
+        as_usize[..max($l, size_of::<usize>())]
+            .copy_from_slice(&$b[..max($l, size_of::<usize>())]);
+
+        usize::from_le_bytes(as_usize)
+    }};
+}

@@ -1,9 +1,9 @@
 use anyhow::{Result, anyhow};
-use bytes::Bytes;
-use pyo3::{FromPyObject, IntoPyObject, Py, pyclass, types::PyFunction};
+use bytes::{Buf, Bytes};
+use pyo3::{IntoPyObject, Py, pyclass, types::PyFunction};
 use serde::{Deserialize, Deserializer};
 use serde_with::{DefaultOnNull, serde_as};
-use std::{collections::HashMap, ops::Range};
+use std::{collections::HashMap, ops::Range, path::PathBuf};
 
 pub type OpMap = HashMap<usize, OpHandler>;
 
@@ -11,17 +11,20 @@ pub type OpMap = HashMap<usize, OpHandler>;
 pub struct Machine {
     pub config: MachineConfig,
     pub define: Define,
+    pub rad_state: RadState
 }
 
-// This is the owned final type of the Define Python API
-//#[pyclass]
+#[pyclass(from_py_object)]
+#[derive(Clone)]
+pub struct RadState(pub HashMap<usize, Vec<u8>>);
 
+// This is the owned final type of the Define Python API
 #[derive(Debug)]
 pub struct Define {
     pub ops: OpMap,
     pub arg_handler: Option<ArgHandler>,
     pub arg_formatter: Option<ArgFormatter>,
-    //pub primary_args_handler: String,
+    pub disassembler: Option<Disassembler>, //pub primary_args_handler: String,
 }
 
 #[derive(Debug)]
@@ -31,10 +34,14 @@ pub struct ArgHandler(pub Py<PyFunction>);
 pub struct ArgFormatter(pub Py<PyFunction>);
 
 #[derive(Debug)]
+pub struct Disassembler(pub Py<PyFunction>);
+
+#[derive(Debug)]
 pub struct OpHandler {
     pub func: Py<PyFunction>,
     pub parser_args: Vec<ParserArg>,
     pub op_name: String,
+    pub rad: Option<String>,
 }
 
 #[serde_as]
@@ -53,6 +60,8 @@ pub struct MachineConfig {
     #[serde_as(as = "DefaultOnNull")]
     #[serde(default = "default_true")]
     pub little_endian: bool,
+
+    pub implementation: Option<PathBuf>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -118,6 +127,7 @@ pub fn default_true() -> bool {
 #[derive(IntoPyObject, Clone)]
 pub struct PopulatedArg {
     pub t: ParserArgType,
+    pub direction: ParserArgDirection,
     pub arg_val: Vec<u8>,
 }
 
@@ -182,13 +192,18 @@ impl ParserArg {
     }
 
     /// Populate the argument
-    pub fn populate(&self, buf: &Bytes) -> PopulatedArg {
-        let mut b = Vec::with_capacity(self.arg_size as usize);
-        b.copy_from_slice(&buf[..(self.arg_size as usize)]);
-        PopulatedArg {
-            t: self.t,
-            arg_val: b,
+    pub fn populate(&self, buf: &Bytes, offset: usize) -> Result<PopulatedArg> {
+        if offset + self.arg_size as usize > buf.remaining() {
+            return Err(anyhow!("Out of bounds population"));
         }
+
+        let mut b = Vec::with_capacity(self.arg_size as usize);
+        b.extend_from_slice(&buf[offset..(offset + self.arg_size as usize)]);
+        Ok(PopulatedArg {
+            t: self.t,
+            direction: self.direction,
+            arg_val: b,
+        })
     }
 }
 
@@ -201,7 +216,8 @@ pub enum ParserArgType {
     Immediate,
     //Other(String) //TODO: Add ability to define custom ParserArgTypes
 }
-#[derive(PartialEq, Clone, Debug)]
+#[pyclass(eq, eq_int, from_py_object, name = "ArgDirection")]
+#[derive(PartialEq, Clone, Debug, Copy)]
 pub enum ParserArgDirection {
     None,
     Source,

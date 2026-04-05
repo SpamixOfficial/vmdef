@@ -16,7 +16,8 @@
     },
     "memory_size": null,
     "instruction": {
-        "op_size": 8
+        "op_size": 2
     },
-    "little_endian": true
+    "little_endian": true,
+    "implementation": "machine.py"
 }

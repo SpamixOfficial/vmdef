@@ -8,9 +8,10 @@ def callback_1(em):
     em.unpause() # will check for em.halted by itself. Only reason we do it in the loop down below is to check if we should stop the loop
 
 
-#data = open("vmdata.bin", "rb").read()
+data = open("vmdata.bin", "rb").read()
 
-m = machine.init(d="machine.json", i="machine.py")
+# by default your implementation file is in machine.json, but it is overridable through init
+m = machine.init(d="machine.json")#, i="machine.py")
 
 print(m.disassemble(data=data))
 
