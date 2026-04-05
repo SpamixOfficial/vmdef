@@ -1,9 +1,9 @@
 use anyhow::{Result, anyhow};
 use bytes::{Buf, Bytes};
-use pyo3::{IntoPyObject, Py, pyclass, types::PyFunction};
+use pyo3::{FromPyObject, IntoPyObject, Py, pyclass, types::PyFunction};
 use serde::{Deserialize, Deserializer};
 use serde_with::{DefaultOnNull, serde_as};
-use std::{collections::HashMap, ops::Range, path::PathBuf};
+use std::{collections::HashMap, ops::Range, path::PathBuf, sync::Mutex};
 
 pub type OpMap = HashMap<usize, OpHandler>;
 
@@ -11,10 +11,9 @@ pub type OpMap = HashMap<usize, OpHandler>;
 pub struct Machine {
     pub config: MachineConfig,
     pub define: Define,
-    pub rad_state: RadState
+    pub rad_state: Mutex<RadState>,
 }
 
-#[pyclass(from_py_object)]
 #[derive(Clone)]
 pub struct RadState(pub HashMap<usize, Vec<u8>>);
 
@@ -40,6 +39,7 @@ pub struct Disassembler(pub Py<PyFunction>);
 pub struct OpHandler {
     pub func: Py<PyFunction>,
     pub parser_args: Vec<ParserArg>,
+    pub args_preprocess: Option<Py<PyFunction>>,
     pub op_name: String,
     pub rad: Option<String>,
 }
@@ -124,10 +124,13 @@ pub fn default_true() -> bool {
 }
 
 /// A ParserArg populated with a value, to be passed onto arg handlers and prettifier
-#[derive(IntoPyObject, Clone)]
+#[derive(IntoPyObject, FromPyObject, Clone, Debug)]
 pub struct PopulatedArg {
+    #[pyo3(item)]
     pub t: ParserArgType,
+    #[pyo3(item)]
     pub direction: ParserArgDirection,
+    #[pyo3(item)]
     pub arg_val: Vec<u8>,
 }
 

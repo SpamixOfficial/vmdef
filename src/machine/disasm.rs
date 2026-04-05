@@ -1,4 +1,4 @@
-use std::{cmp::max, ffi::CString};
+use std::{cmp::min, collections::HashMap, ffi::CString};
 
 use anyhow::{Result, anyhow};
 use bytes::{Buf, Bytes};
@@ -19,13 +19,10 @@ macro_rules! rad_error {
             $e,
         ))
     }};
-    ($e:expr, $s:expr) => {{
-        anyhow!(format!(
-            "WARNING - RAD statement not executed because {}. Either apply a pre-process or discard your RAD.\nStatement at fault: {}",
-            $e,
-            $s
-        ))
-    }};
+}
+
+macro_rules! combine_error_len {
+    ($e:expr, $l:expr) => {{ $e.or_else(|e| Err((e, $l))) }};
 }
 
 impl Machine {
@@ -39,6 +36,14 @@ impl Machine {
         buf: &Bytes,
         op_size: usize,
     ) -> Result<(usize, String), (anyhow::Error, usize)> {
+        /*
+         * The flow is roughly:
+         *     Get Operator and determine args
+         *     Populate args
+         *     Preprocess their value if there's a preprocess function
+         *     Run the RAD statement if there is one
+         *     Format it nicely into 1 instruction
+         */
         assert!(op_size <= size_of::<usize>());
 
         if self.define.arg_formatter.is_none() {
@@ -61,27 +66,58 @@ impl Machine {
             op = op.swap_bytes();
         }
 
-        let op_item = option_to_res!(self.define.ops.get(&op), "opcode {} not found", op)
-            .or_else(|e| Err((e, op_size)))?;
+        let op_item = combine_error_len!(
+            option_to_res!(self.define.ops.get(&op), "opcode {} not found", op),
+            op_size
+        )?;
 
         let mut len = op_size;
         let mut populated_args: Vec<PopulatedArg> = vec![];
 
         for arg in &op_item.parser_args {
-            populated_args.push(arg.populate(&buf, len).or_else(|e| Err((e, len)))?);
+            populated_args.push(combine_error_len!(arg.populate(&buf, len), len)?);
             len += arg.arg_size as usize;
+        }
+
+        // args_preprocess
+        if let Some(pre_process) = &op_item.args_preprocess {
+            populated_args = combine_error_len!(
+                Python::attach(|py| -> Result<Vec<PopulatedArg>> {
+                    Ok(pre_process
+                        .call(py, (&op, populated_args), None)?
+                        .extract(py)?)
+                }),
+                len
+            )?;
+        }
+
+        // if there's a RAD we need to execute it now
+        let rad_args: HashMap<usize, Vec<u8>>;
+
+        if let Some(rad) = &op_item.rad {
+            rad_args = {
+                let mut guard = self.rad_state.lock().unwrap();
+                combine_error_len!(guard.process(rad.clone(), populated_args.clone()), len)?
+            };
+        } else {
+            rad_args = {
+                let guard = self.rad_state.lock().unwrap();
+                guard.get_state()
+            };
         }
 
         let formatted = format!(
             "{} {}",
             op_item.op_name,
-            self.define
-                .arg_formatter
-                .as_ref()
-                .unwrap()
-                .execute(populated_args, self.rad_state.clone())
-                .or_else(|e| Err((e, len)))?
-                .join(",")
+            combine_error_len!(
+                self.define
+                    .arg_formatter
+                    .as_ref()
+                    .unwrap()
+                    .execute(populated_args, rad_args),
+                len
+            )?
+            .join(",")
         );
 
         Ok((len, formatted))
@@ -102,8 +138,8 @@ impl Machine {
         let mut b = Bytes::from(data);
 
         let mut disassembly: String = String::new();
-
         while b.remaining() > 0 {
+            let last_remaining = b.remaining();
             if op_size > b.remaining() {
                 disassembly += &hex::encode(b.to_vec());
                 break;
@@ -126,13 +162,16 @@ impl Machine {
             disassembly += &format!("{}\t{}\n", hex::encode(&b[..len]), tmp_dis);
 
             b.advance(len);
+            if last_remaining == b.remaining() {
+                return Err(anyhow!("ERROR - Possible infinite loop detected, exiting"));
+            }
         }
 
         Ok(disassembly)
     }
 }
 
-/// When processing evals RadState takes care of dereferencing registers to values and then re-referencing them
+/// When processing rad statement RadState takes care of dereferencing registers to values and then re-referencing them
 ///
 /// NOTE: A RAD statement will not run if a source-register is missing a value
 impl RadState {
@@ -176,11 +215,11 @@ impl RadState {
         Ok(())
     }
 
-    pub fn process_eval(
+    pub fn process(
         &mut self,
         rad_statement: String,
         args: Vec<PopulatedArg>,
-    ) -> Result<Vec<Vec<u8>>> {
+    ) -> Result<HashMap<usize, Vec<u8>>> {
         let mut py_args: Vec<Vec<u8>> = vec![];
         for arg in args.clone() {
             py_args.push(self.get(arg).or_else(|e| {
@@ -207,6 +246,9 @@ impl RadState {
         assert_eq!(res_args.len(), py_args.len());
 
         for (res, arg) in res_args.iter().zip(args) {
+            if arg.direction == ParserArgDirection::Source {
+                continue;
+            }
             self.set(arg, res.clone()).or_else(|e| {
                 Err(anyhow!(
                     "{}\nStatement at fault: {}",
@@ -216,6 +258,10 @@ impl RadState {
             })?;
         }
 
-        Ok(res_args)
+        Ok(self.0.clone())
+    }
+
+    pub fn get_state(&self) -> HashMap<usize, Vec<u8>> {
+        return self.0.clone();
     }
 }

@@ -12,7 +12,7 @@ pub struct PyDefine {
     pub ops: OpMap,
     pub arg_handler: Option<ArgHandler>,
     pub arg_formatter: Option<ArgFormatter>,
-    pub disassembler: Option<Disassembler>
+    pub disassembler: Option<Disassembler>,
 }
 
 #[pymethods]
@@ -23,18 +23,18 @@ impl PyDefine {
             ops: HashMap::new(),
             arg_handler: Option::None,
             arg_formatter: Option::None,
-            disassembler: Option::None
-            //primary_args_handler: String::new(),
+            disassembler: Option::None, //primary_args_handler: String::new(),
         }
     }
 
-    #[pyo3(signature = (code, args=vec![], rad=None, name=None))]
+    #[pyo3(signature = (code, args=vec![], rad=None, name=None, args_preprocess=None))]
     pub fn op(
         slf: Py<Self>,
         code: usize,
         args: Vec<String>,
         rad: Option<String>,
         name: Option<String>,
+        args_preprocess: Option<Py<PyFunction>>,
     ) -> OpDecorator {
         OpDecorator {
             parent: slf,
@@ -42,6 +42,7 @@ impl PyDefine {
             args,
             rad,
             name,
+            args_preprocess,
         }
     }
 
@@ -65,6 +66,7 @@ impl PyDefine {
 #[pyclass]
 pub struct OpDecorator {
     parent: Py<PyDefine>,
+    args_preprocess: Option<Py<PyFunction>>,
     code: usize,
     args: Vec<String>,
     rad: Option<String>,
@@ -82,16 +84,22 @@ impl OpDecorator {
 
         Python::attach(|py| {
             let mut s = self.parent.bind(py).borrow_mut();
-            let op_name: String = self
-                .name
-                .clone()
-                .unwrap_or(func.bind(py).getattr("__name__")?.extract()?);
+            let op_name: String = self.name.clone().unwrap_or(
+                func.bind(py)
+                    .getattr("__name__")?
+                    .extract::<String>()?
+                    .to_uppercase(), // default uppercase cause it looks nicer imo
+            );
+
+            let args_preprocess: Option<Py<PyFunction>> =
+                self.args_preprocess.as_ref().map(|x| x.clone_ref(py));
 
             let handler = OpHandler {
                 func: func.clone_ref(py),
                 op_name,
                 parser_args,
-                rad: self.rad.clone()
+                rad: self.rad.clone(),
+                args_preprocess,
             };
             s.ops.insert(self.code, handler);
 

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use anyhow::{Result, anyhow};
 use pyo3::{Py, PyAny, Python};
 
@@ -38,16 +40,16 @@ impl ArgHandler {
 }
 
 impl ArgFormatter {
-    pub fn execute(&self, inp: Vec<PopulatedArg>, rad_state: RadState) -> Result<Vec<String>> {
-        unwrap_or!(
-            Python::try_attach(|py| -> Result<Vec<String>> {
+    pub fn execute(&self, inp: Vec<PopulatedArg>, rad_state: HashMap<usize, Vec<u8>>) -> Result<Vec<String>> {
+       //unwrap_or!(
+            Python::attach(|py| -> Result<Vec<String>> {
                 //let kwargs = PyDict::new(py);
                 //kwargs.set_item("args", inp.clone())?;
                 //kwargs.set_item("rad_state", value)
-                let res: Vec<String> = self.0.call(py, (inp, rad_state), None)?.extract(py)?;
+                let res: Vec<String> = self.0.call(py, (inp,rad_state), None)?.extract(py)?;
                 Ok(res)
-            }),
-            "could not attach to python interpreter"
-        )
+            })
+            //"could not attach to python interpreter"
+        //)
     }
 }

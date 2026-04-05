@@ -1,4 +1,4 @@
-use std::{collections::HashMap, ffi::CString, fs, path::PathBuf};
+use std::{collections::HashMap, ffi::CString, fs, path::PathBuf, sync::Mutex};
 
 use pyo3::{
     Bound, PyResult, Python,
@@ -60,7 +60,7 @@ impl Machine {
         Ok(Machine {
             config,
             define,
-            rad_state: RadState(HashMap::new()),
+            rad_state: Mutex::new(RadState(HashMap::new())),
         })
     }
 

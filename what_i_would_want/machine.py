@@ -4,7 +4,7 @@ from vmdef import define, ArgType
 d = define.init()
 
 def handle_str_load(_op, args):
-    args[1] = args[1]&0x7f
+    args[1]["arg_val"] = bytes([args[1]["arg_val"][0]&0x7f, 0x0])
     return args
 
 # by default the args handler is the one you registered as the default
@@ -16,7 +16,7 @@ def handle_str_load(_op, args):
 def push(args):
     pass
 # a custom name can be passed with the name parameter
-@d.op(code=0x1, args=["rd2"], name="pop")
+@d.op(code=0x1, args=["rd2"], name="POP")
 def pop(args):
     pass
 # r = register
@@ -25,7 +25,7 @@ def pop(args):
 # 1 = argument size (bytes)
 # Any opcode with RAD specified will update the internal statemachine during disassembly
 # the RAD parameter should be a valid eval, you can access your args through the `args` list
-@d.op(code=0x2, args=["rd2","rs2"], rad="args[0]=args[1]", args_preprocess=handle_str_load)
+@d.op(code=0x2, args=["rd2","rs2"], rad="args[0]=args[1]")
 def mov(args):
     pass
 
@@ -38,11 +38,11 @@ def mov(args):
 def movi(args):
     pass
 
-@d.op(code=4, args=["rd2", "ms2"])
+@d.op(code=4, args=["rd2", "ms2"], args_preprocess=handle_str_load)
 def load(args):
     pass
 
-@d.op(code=5, args=["md2", "rs2"], name="str")
+@d.op(code=5, args=["md2", "rs2"], name="STR", args_preprocess=handle_str_load)
 def store(args):
     pass
 
@@ -54,11 +54,11 @@ def add(args):
 def sub(args):
     pass
 
-@d.op(code=8, args=["rd2", "rs2"], name="and")
+@d.op(code=8, args=["rd2", "rs2"], name="AND")
 def and_(args):
     pass
 
-@d.op(code=9, args=["rd2", "rs2"], name="or")
+@d.op(code=9, args=["rd2", "rs2"], name="OR")
 def or_(args):
     pass
 
@@ -105,7 +105,7 @@ def arg_handler(args):
 @d.arg_formatter
 def arg_prettifier(args, rad_state):
     res = []
-    for (i,arg) in enumerate(args):
+    for arg in args:
         v = int.from_bytes(arg["arg_val"], byteorder="little")
         match arg["t"]:
             case ArgType.Register:
@@ -114,7 +114,7 @@ def arg_prettifier(args, rad_state):
                 res.append(hex(v))
             case ArgType.Memory:
                 r = format_register(v)
-                rad_v = int.from_bytes(rad_state[i], byteorder="little")
+                rad_v = int.from_bytes(rad_state[v], byteorder="little")
                 if v&0x80 == 0:
                     if rad_v == 0xfe:
                         res.append(f"[mmi]")
