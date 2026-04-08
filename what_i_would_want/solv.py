@@ -22,7 +22,7 @@ em = m.create_emulation(data=data)
 # provide address (and callback, but that's optional, if no callback is provided you must unpause it manually after em.start() (if you dont do that in your callback))
 em.set_breakpoint(0x100, callback_1)
 # size is 1 byte by default
-# (psst, this is a memory OFFSET, not ABSOLUTE ADDRESS! Use breakpoints for data-space!)
+# (psst, this is a memory address, use breakpoints for data-space!)
 em.set_watchpoint(0x1000, size=8) # remember to specify the correct address space!
 
 em.start() # this is blocking

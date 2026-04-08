@@ -108,19 +108,6 @@ impl Default for MemoryLayoutPermissions {
 pub struct InstructionConfig {
     pub op_size: Option<usize>, // if None custom decoder will be enforced
 }
-/*
-#[derive(Deserialize, Debug, Default, Clone)]
-#[serde_as]
-pub struct Register {
-    #[serde(default)]
-    #[serde_as(as = "DefaultOnNull")]
-    pub attribute: RegisterAttribute,
-
-    #[serde(default)]
-    #[serde_as(as = "DefaultOnNull")]
-    pub size: u8, // size in bytes, max is sizeof(usize)
-}
-*/
 
 #[derive(Debug, Clone, Default)]
 pub struct Register {
@@ -436,6 +423,9 @@ pub fn default_1() -> u8 {
 
 #[pyclass(name = "emulator")]
 pub struct Emulator {
+    // --- Status --- //
+    pub halted: bool,
+    // --- Data --- //
     pub data: Bytes,
     pub memory_config: MemoryConfig,
     pub memory: Vec<u8>,
@@ -444,7 +434,12 @@ pub struct Emulator {
     pub sp: Option<EmuRegister>,
     pub flags: Option<EmuRegister>,
     pub ops: Arc<OpMap>, // this allows us to access the ops without transferring ownership
+    
+    // --- Runtime Stuff --- //
+    pub watchpoints: HashMap<Range<usize>, Option<Py<PyFunction>>>, // start..start+size
+    pub breakpoints: HashMap<usize, Option<Py<PyFunction>>>
 }
+
 #[derive(Debug, Clone)]
 pub struct EmuRegister {
     pub data: Bytes,

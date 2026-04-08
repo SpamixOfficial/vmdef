@@ -1,4 +1,5 @@
 from vmdef import define, ArgType
+from time import sleep
 
 
 d = define.init()

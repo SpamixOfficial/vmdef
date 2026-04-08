@@ -1,4 +1,4 @@
-use std::{cmp::min, collections::HashMap, ffi::CString};
+use std::{cmp::min, collections::HashMap, ffi::CString, process::exit};
 
 use anyhow::{Result, anyhow};
 use bytes::{Buf, Bytes};
@@ -163,6 +163,10 @@ impl Machine {
                 }
                 Err((e, l)) => {
                     log_if_verbose!(self.config.verbose, "WARNING - {}", e.to_string());
+                    
+                    if e.to_string() == "KeyboardInterrupt: " {
+                        exit(1);
+                    }
                     tmp_dis = DisFormatterLine {
                         opcode: String::from("INVALID"),
                         ..Default::default()

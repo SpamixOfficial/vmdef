@@ -19,7 +19,7 @@ use crate::{
     pydefine::PyDefine,
     types::{
         ArgFormatter, Define, DisFormatter, DisFormatterLine, Disassembler, EmuRegister, Emulator,
-        Machine, MachineConfig, OpMap, RadState,
+        Machine, MachineConfig, OpMap, RadState, RegisterAttribute,
     },
 };
 
@@ -77,8 +77,6 @@ impl Machine {
             })
         })?;
 
-        dbg!(&config, &define);
-
         Ok(Machine {
             config,
             define,
@@ -116,18 +114,32 @@ impl Machine {
         let memory: Vec<u8> = memory.unwrap_or(vec![0; m_size]);
 
         let mut emu_registers: HashMap<usize, EmuRegister> = HashMap::new();
-        let pc: Option<EmuRegister> = None;
-        let sp: Option<EmuRegister> = None;
-        let flags: Option<EmuRegister> = None;
+        let mut pc: Option<EmuRegister> = None;
+        let mut sp: Option<EmuRegister> = None;
+        let mut flags: Option<EmuRegister> = None;
+
         for reg in &self.config.registers {
-            emu_registers.insert(
-                reg.1.code,
-                EmuRegister {
-                    max_size: reg.1.size as usize,
-                    write: reg.1.write,
-                    ..Default::default()
-                },
-            );
+            let emu_reg = EmuRegister {
+                max_size: reg.1.size as usize,
+                write: reg.1.write,
+                ..Default::default()
+            };
+
+            match reg.1.attribute {
+                RegisterAttribute::Pc => pc = Some(emu_reg),
+                RegisterAttribute::Sp => sp = Some(emu_reg),
+                RegisterAttribute::Flags => flags = Some(emu_reg),
+                _ => {
+                    emu_registers.insert(reg.1.code, emu_reg);
+                }
+            };
+        }
+
+        if pc.is_none() {
+            Err(anyhow!(
+                "{} - No PC-attributed register was defined",
+                function!()
+            ))?;
         }
 
         if let Some(regs) = registers {
@@ -147,18 +159,25 @@ impl Machine {
                     ))?;
                 }
 
-                emu_registers.insert(
-                    reg_info.code,
-                    EmuRegister {
-                        data: Bytes::from(reg.1),
-                        max_size: reg_info.size as usize,
-                        write: reg_info.write,
-                    },
-                );
+                let emu_reg = EmuRegister {
+                    data: Bytes::from(reg.1),
+                    max_size: reg_info.size as usize,
+                    write: reg_info.write,
+                };
+
+                match reg_info.attribute {
+                    RegisterAttribute::Pc => pc = Some(emu_reg),
+                    RegisterAttribute::Sp => sp = Some(emu_reg),
+                    RegisterAttribute::Flags => flags = Some(emu_reg),
+                    _ => {
+                        emu_registers.insert(reg_info.code, emu_reg);
+                    }
+                };
             }
         }
 
         Ok(Emulator {
+            halted: false,
             data: Bytes::from(data),
             memory_config: self.config.memory.clone(),
             memory,
@@ -167,6 +186,8 @@ impl Machine {
             sp,
             flags,
             ops: self.define.ops.clone(),
+            breakpoints: HashMap::new(),
+            watchpoints: HashMap::new()
         })
     }
 }
