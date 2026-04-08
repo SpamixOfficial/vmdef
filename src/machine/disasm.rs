@@ -59,11 +59,6 @@ impl Machine {
 
         let mut op = buf_as_usize!(buf, op_size);
 
-        /*let mut op_bytes = [0u8; size_of::<usize>()];
-        op_bytes[..op_size].copy_from_slice(&buf[..op_size]);
-
-        let mut op = usize::from_le_bytes(op_bytes);*/
-
         if !self.config.little_endian {
             op = op.swap_bytes();
         }

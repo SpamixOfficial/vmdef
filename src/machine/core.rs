@@ -5,7 +5,7 @@ use pyo3::{Py, PyAny, Python};
 
 use crate::{
     function,
-    types::{ArgFormatter, ArgHandler, OpHandler, PopulatedArg},
+    types::{ArgFormatter, OpHandler, PopulatedArg},
     unwrap_or,
 };
 
@@ -23,7 +23,7 @@ impl OpHandler {
     }
 }
 
-impl ArgHandler {
+/*impl ArgHandler {
     pub fn execute(&self, inp: Vec<PopulatedArg>) -> Result<Py<PyAny>> {
         unwrap_or!(
             Python::try_attach(|py| -> Result<Py<PyAny>> {
@@ -32,7 +32,7 @@ impl ArgHandler {
             "could not attach to python interpreter"
         )
     }
-}
+}*/
 
 impl ArgFormatter {
     pub fn execute(&self, inp: Vec<PopulatedArg>, rad_state: HashMap<usize, Vec<u8>>) -> Result<Vec<String>> {

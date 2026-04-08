@@ -93,9 +93,9 @@ def halt(args):
 # args will be the argspecifier from the args parameter above, but parsed by the library to give you a dictionary along with necessary data (check docs)
 # should return a dictionary object like specified in the docs, emulator/RAD will process it accordingly
 # buffer increments are not necessary since we already know the whole instruction length (cause you declared it correctly, right?)
-@d.arg_handler
-def arg_handler(args):
-    pass
+#@d.arg_handler
+#def arg_handler(args):
+#    pass
 
 # this is only used during disassembly, and it is completely optional!
 # NOTE: only one formatter can be defined, so make sure it is extensive!

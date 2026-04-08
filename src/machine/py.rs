@@ -53,7 +53,7 @@ impl Machine {
 
             Ok(Define {
                 ops: std::mem::take(&mut borrowed.ops), // clone is impossible as all fields contain pointers to Py<PyFunction>
-                arg_handler: std::mem::take(&mut borrowed.arg_handler),
+                //arg_handler: std::mem::take(&mut borrowed.arg_handler),
                 arg_formatter: std::mem::take(&mut borrowed.arg_formatter),
                 disassembler: std::mem::take(&mut borrowed.disassembler),
             })

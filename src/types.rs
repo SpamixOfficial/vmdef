@@ -21,13 +21,13 @@ pub struct RadState(pub HashMap<usize, Vec<u8>>);
 #[derive(Debug)]
 pub struct Define {
     pub ops: OpMap,
-    pub arg_handler: Option<ArgHandler>,
+    //pub arg_handler: Option<ArgHandler>,
     pub arg_formatter: Option<ArgFormatter>,
     pub disassembler: Option<Disassembler>, //pub primary_args_handler: String,
 }
 
-#[derive(Debug)]
-pub struct ArgHandler(pub Py<PyFunction>);
+/*#[derive(Debug)]
+pub struct ArgHandler(pub Py<PyFunction>);*/
 
 #[derive(Debug)]
 pub struct ArgFormatter(pub Py<PyFunction>);

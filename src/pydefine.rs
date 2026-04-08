@@ -5,12 +5,12 @@ use pyo3::types::{PyAnyMethods, PyFunction};
 use pyo3::{Py, PyResult};
 use pyo3::{Python, pyclass, pymethods};
 
-use crate::types::{ArgFormatter, ArgHandler, Disassembler, OpHandler, OpMap, ParserArg};
+use crate::types::{ArgFormatter, Disassembler, OpHandler, OpMap, ParserArg};
 
 #[pyclass(name = "define")]
 pub struct PyDefine {
     pub ops: OpMap,
-    pub arg_handler: Option<ArgHandler>,
+    //pub arg_handler: Option<ArgHandler>,
     pub arg_formatter: Option<ArgFormatter>,
     pub disassembler: Option<Disassembler>,
 }
@@ -21,7 +21,7 @@ impl PyDefine {
     pub fn init() -> Self {
         Self {
             ops: HashMap::new(),
-            arg_handler: Option::None,
+            //arg_handler: Option::None,
             arg_formatter: Option::None,
             disassembler: Option::None, //primary_args_handler: String::new(),
         }
@@ -54,13 +54,13 @@ impl PyDefine {
         })
     }
 
-    pub fn arg_handler(slf: Py<Self>, func: Py<PyFunction>) -> PyResult<Py<PyFunction>> {
+    /*pub fn arg_handler(slf: Py<Self>, func: Py<PyFunction>) -> PyResult<Py<PyFunction>> {
         Python::attach(|py| -> PyResult<Py<PyFunction>> {
             let mut s = slf.borrow_mut(py);
             s.arg_handler = Some(ArgHandler(func.clone_ref(py)));
             Ok(func)
         })
-    }
+    }*/
 }
 
 #[pyclass]
