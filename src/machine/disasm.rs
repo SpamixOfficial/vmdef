@@ -8,8 +8,8 @@ use pyo3::{
 };
 
 use crate::{
-    buf_as_usize, function, option_to_res,
-    types::{Machine, ParserArgDirection, ParserArgType, PopulatedArg, RadState},
+    buf_as_usize, function, log_if_verbose, option_to_res,
+    types::{DisFormatterLine, Machine, ParserArgDirection, ParserArgType, PopulatedArg, RadState},
 };
 
 macro_rules! rad_error {
@@ -28,14 +28,16 @@ macro_rules! combine_error_len {
 impl Machine {
     /// Disassemble next instruction
     ///
-    /// Return value is (len, formatted_instruction)
+    /// Return value is (len, incomplete line)
+    ///
+    /// You'll have to populate the hex field yourself!
     ///
     /// **This function will not consume the buffer**
     pub fn next_disassemble(
         &self,
         buf: &Bytes,
         op_size: usize,
-    ) -> Result<(usize, String), (anyhow::Error, usize)> {
+    ) -> Result<(usize, DisFormatterLine), (anyhow::Error, usize)> {
         /*
          * The flow is roughly:
          *     Get Operator and determine args
@@ -106,24 +108,23 @@ impl Machine {
             };
         }
 
-        let formatted = format!(
-            "{} {}",
-            op_item.op_name,
-            combine_error_len!(
+        let line = DisFormatterLine {
+            opcode: op_item.op_name.clone(),
+            operands: combine_error_len!(
                 self.define
                     .arg_formatter
                     .as_ref()
                     .unwrap()
                     .execute(populated_args, rad_args),
                 len
-            )?
-            .join(",")
-        );
+            )?,
+            ..Default::default()
+        };
 
-        Ok((len, formatted))
+        Ok((len, line))
     }
 
-    pub fn _disassemble(&self, data: Vec<u8>) -> Result<String> {
+    pub fn _disassemble(&self, data: Vec<u8>) -> Result<Vec<DisFormatterLine>> {
         let op_size = self.config.instruction.op_size.unwrap();
 
         if op_size > size_of::<usize>() {
@@ -137,15 +138,18 @@ impl Machine {
 
         let mut b = Bytes::from(data);
 
-        let mut disassembly: String = String::new();
+        let mut disassembly: Vec<DisFormatterLine> = vec![];
         while b.remaining() > 0 {
             let last_remaining = b.remaining();
             if op_size > b.remaining() {
-                disassembly += &hex::encode(b.to_vec());
+                disassembly.push(DisFormatterLine {
+                    hex: hex::encode(b.to_vec()),
+                    ..Default::default()
+                });
                 break;
             }
             let len;
-            let tmp_dis: String;
+            let tmp_dis: DisFormatterLine;
 
             match self.next_disassemble(&b, op_size) {
                 Ok((l, d)) => {
@@ -153,13 +157,19 @@ impl Machine {
                     len = l;
                 }
                 Err((e, l)) => {
-                    eprintln!("WARNING - {}", e.to_string());
-                    tmp_dis = String::from("INVALID");
+                    log_if_verbose!(self.config.verbose, "WARNING - {}", e.to_string());
+                    tmp_dis = DisFormatterLine {
+                        opcode: String::from("INVALID"),
+                        ..Default::default()
+                    };
                     len = l;
                 }
             }
 
-            disassembly += &format!("{}\t{}\n", hex::encode(&b[..len]), tmp_dis);
+            disassembly.push(DisFormatterLine {
+                hex: hex::encode(&b[..len]),
+                ..tmp_dis
+            });
 
             b.advance(len);
             if last_remaining == b.remaining() {

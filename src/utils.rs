@@ -36,9 +36,17 @@ macro_rules! buf_as_usize {
     }};
     ($b:expr, $l:expr) => {{
         let mut as_usize = [0u8; size_of::<usize>()];
-        as_usize[..min($l, size_of::<usize>())]
-            .copy_from_slice(&$b[..min($l, size_of::<usize>())]);
+        as_usize[..min($l, size_of::<usize>())].copy_from_slice(&$b[..min($l, size_of::<usize>())]);
 
         usize::from_le_bytes(as_usize)
+    }};
+}
+
+#[macro_export]
+macro_rules! log_if_verbose {
+    ($v:expr, $($x:expr),*) => {{
+        if $v {
+            eprintln!($($x),*);
+        }
     }};
 }

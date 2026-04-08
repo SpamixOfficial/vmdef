@@ -19,5 +19,6 @@
         "op_size": 2
     },
     "little_endian": true,
-    "implementation": "machine.py"
+    "implementation": "machine.py",
+    "verbose": true
 }

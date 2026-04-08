@@ -62,6 +62,13 @@ pub struct MachineConfig {
     pub little_endian: bool,
 
     pub implementation: Option<PathBuf>,
+
+    #[serde_as(as = "DefaultOnNull")]
+    pub verbose: bool,
+
+    #[serde_as(as = "DefaultOnNull")]
+    #[serde(default)]
+    pub format: FormattingConfig,
 }
 
 #[derive(Deserialize, Debug)]
@@ -225,4 +232,57 @@ pub enum ParserArgDirection {
     None,
     Source,
     Destination,
+}
+
+pub struct DisFormatter {
+    pub lines: Vec<DisFormatterLine>,
+    pub config: FormattingConfig,
+}
+
+#[derive(Clone, Default, FromPyObject)]
+pub struct DisFormatterLine {
+    pub hex: String,
+    pub opcode: String,
+    pub operands: Vec<String>,
+}
+
+#[serde_as]
+#[derive(Deserialize, Debug, Clone)]
+pub struct FormattingConfig {
+    // hard to implement without uglifying code more
+    // pydefine.rs:21
+    //#[serde_as(as = "DefaultOnNull")]
+    //pub operator_lowercase: bool,
+    #[serde_as(as = "DefaultOnNull")]
+    #[serde(default = "default_instruction_format")]
+    pub instruction_format: String,
+
+    #[serde_as(as = "DefaultOnNull")]
+    #[serde(default = "default_operand_separator")]
+    pub operand_separator: String,
+
+    #[serde_as(as = "DefaultOnNull")]
+    #[serde(default = "default_true")]
+    pub include_hex: bool,
+    // realized that it's completely unnecessary to use tabs, might bring this back but probably not...
+    //#[serde_as(as = "DefaultOnNull")]
+    //pub pad_with_tabs: bool,
+}
+
+impl Default for FormattingConfig {
+    fn default() -> Self {
+        Self {
+            instruction_format: default_instruction_format(),
+            operand_separator: default_operand_separator(),
+            include_hex: true,
+        }
+    }
+}
+
+fn default_instruction_format() -> String {
+    "{} {}".to_owned()
+}
+
+fn default_operand_separator() -> String {
+    ",".to_owned()
 }

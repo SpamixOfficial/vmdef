@@ -2,6 +2,7 @@ mod types;
 mod machine;
 mod utils;
 mod pydefine;
+mod formatter;
 
 use pyo3::prelude::*;
 

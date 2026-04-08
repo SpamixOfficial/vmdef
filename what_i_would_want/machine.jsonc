@@ -26,5 +26,6 @@
         "op_size": 2 // in bytes, null means variable and a custom decoder will be necessary
     },
     "little_endian": true, // doesn't really matter in our case since every piece of data is one byte
-    "implementation": "machine.py" // this can be overwritten in machine.init, at least one should be present!
+    "implementation": "machine.py", // this can be overwritten in machine.init, at least one should be present!
+    "verbose": true // this controls Err(e) log output, also configurable through machine.init
 }

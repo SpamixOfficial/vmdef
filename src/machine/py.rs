@@ -10,22 +10,26 @@ use pyo3::{
 use crate::{
     function,
     pydefine::PyDefine,
-    types::{Define, Machine, MachineConfig, RadState},
+    types::{Define, DisFormatter, DisFormatterLine, Machine, MachineConfig, RadState},
 };
 
 /// python exposed API
 #[pymethods]
 impl Machine {
     #[staticmethod]
-    #[pyo3(signature = (d, i=None))]
-    pub fn init(d: PathBuf, i: Option<PathBuf>) -> PyResult<Self> {
-        let config: MachineConfig = serde_json::from_str(&fs::read_to_string(d)?).map_err(|x| {
-            PyException::new_err(format!(
-                "{} - could not read machine config: {}",
-                function!(),
-                x.to_string()
-            ))
-        })?;
+    #[pyo3(signature = (d, i=None, verbose=false))]
+    pub fn init(d: PathBuf, i: Option<PathBuf>, verbose: bool) -> PyResult<Self> {
+        let mut config: MachineConfig =
+            serde_json::from_str(&fs::read_to_string(d)?).map_err(|x| {
+                PyException::new_err(format!(
+                    "{} - could not read machine config: {}",
+                    function!(),
+                    x.to_string()
+                ))
+            })?;
+
+        // overrides
+        config.verbose = config.verbose || verbose;
 
         let impl_path = config.implementation.clone()
             .or(i)
@@ -66,14 +70,19 @@ impl Machine {
 
     #[pyo3(signature = (data))]
     pub fn disassemble(&self, data: Vec<u8>) -> PyResult<String> {
-        let disassembly: String;
+        let disassembly_lines: Vec<DisFormatterLine>;
 
         if self.config.instruction.op_size.is_none() {
             unimplemented!() // TODO: Implement custom disassembler execution
         } else {
-            disassembly = self._disassemble(data)?;
+            disassembly_lines = self._disassemble(data)?;
         };
 
-        Ok(disassembly)
+        let disassembly_formatter = DisFormatter {
+            lines: disassembly_lines,
+            config: self.config.format.clone(),
+        };
+
+        Ok(disassembly_formatter.format()?)
     }
 }
