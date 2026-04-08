@@ -2,26 +2,38 @@
     // the default register would be usize in size, no special properties, etc.
     // at least one RIP/PC-like register must be registered
     "registers": {
-        "a": null,
-        "b": null,
-        "c": null,
-        "d": null,
+        "a": 0,
+        "b": 1,
+        "c": 2,
+        "d": 3,
         "sp": {
+            "code": 4,
             "attribute": "sp"
         },
-        "pc": {
-            "attribute": "pc"
+        "pc": { // if a register, like pc and flags, does not have a designated code you can just leave it out.
+            "attribute": "pc",
+            "write": false
         },
         "flags": {
             "attribute": "flags"
         }
     },
-    "memory_size": null, // default is unlimited, grows as program runs, should either be a number or empty object
-    /*"memory_layout": { // this is not needed for the reactor_vm
-        // if your VM does not have a memory layout you can just leave this unspecified, just remember that it aids in disassembly interpretation
-        "data": "0x0..0x1000", // specify as range (separated by ..), will be interpreted by rust
-        "memory": "0x1000..",
-    },*/
+    "memory": {
+        "size": null, // default is unlimited, grows as program runs, should either be a number or empty object
+        "initial_size": 0,
+        "layout": { // this is not needed for the reactor_vm
+            // if your VM does not have a memory layout you can just leave this unspecified, just remember that it aids in disassembly interpretation
+            // specify as range (separated by ..), will be interpreted by rust
+            /*"0x0..0x1000": {
+                "name": "data",
+                "permissions": "r"
+            }, 
+            "0x1000..":  {
+                "name": "memory",
+                "permissions": "rw"
+            }*/
+        }
+    },
     "instruction": {
         "op_size": 2 // in bytes, null means variable and a custom decoder will be necessary
     },

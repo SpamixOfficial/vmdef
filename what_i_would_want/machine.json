@@ -1,20 +1,25 @@
 {
     "registers": {
-        "a": null,
-        "b": null,
-        "c": null,
-        "d": null,
+        "a": 0,
+        "b": 1,
+        "c": 2,
+        "d": 3,
         "sp": {
+            "code": 4,
             "attribute": "sp"
         },
         "pc": {
-            "attribute": "pc"
+            "attribute": "pc",
+            "write": false
         },
         "flags": {
             "attribute": "flags"
         }
     },
-    "memory_size": null,
+    "memory": {
+        "size": null,
+        "initial_size": 0
+    },
     "instruction": {
         "op_size": 2
     },

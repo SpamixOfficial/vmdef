@@ -25,4 +25,7 @@ mod vmdef {
 
     #[pymodule_export]
     use crate::pydefine::PyDefine;
+
+    #[pymodule_export]
+    use crate::types::Emulator;
 }

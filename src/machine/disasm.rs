@@ -72,7 +72,17 @@ impl Machine {
         let mut populated_args: Vec<PopulatedArg> = vec![];
 
         for arg in &op_item.parser_args {
-            populated_args.push(combine_error_len!(arg.populate(&buf, len), len)?);
+            let mut p_arg = combine_error_len!(arg.populate(&buf, len), len)?;
+
+            if p_arg.t == ParserArgType::Memory && !self.config.memory.layout.is_empty() {
+                for (r, v) in &self.config.memory.layout {
+                    if r.contains(&buf_as_usize!(p_arg.arg_val)) {
+                        p_arg.memory_region = Some(v.name.clone())
+                    }
+                }
+            }
+
+            populated_args.push(p_arg);
             len += arg.arg_size as usize;
         }
 

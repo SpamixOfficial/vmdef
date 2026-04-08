@@ -3,7 +3,7 @@ use bytes::{Buf, Bytes};
 use pyo3::{FromPyObject, IntoPyObject, Py, pyclass, types::PyFunction};
 use serde::{Deserialize, Deserializer};
 use serde_with::{DefaultOnNull, serde_as};
-use std::{collections::HashMap, ops::Range, path::PathBuf, sync::Mutex};
+use std::{collections::HashMap, ops::Range, path::PathBuf, sync::{Arc, Mutex}};
 
 pub type OpMap = HashMap<usize, OpHandler>;
 
@@ -20,7 +20,7 @@ pub struct RadState(pub HashMap<usize, Vec<u8>>);
 // This is the owned final type of the Define Python API
 #[derive(Debug)]
 pub struct Define {
-    pub ops: OpMap,
+    pub ops: Arc<OpMap>,
     //pub arg_handler: Option<ArgHandler>,
     pub arg_formatter: Option<ArgFormatter>,
     pub disassembler: Option<Disassembler>, //pub primary_args_handler: String,
@@ -45,16 +45,14 @@ pub struct OpHandler {
 }
 
 #[serde_as]
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct MachineConfig {
-    #[serde_as(as = "DefaultOnNull<HashMap<_, DefaultOnNull<_>>>")]
     pub registers: HashMap<String, Register>,
 
-    pub memory_size: Option<usize>, // upper size limit for memory vector, None just lets it grow continuously
-
+    #[serde_as(as = "DefaultOnNull")]
     #[serde(default)]
-    #[serde(deserialize_with = "deserialize_range_hashmap")]
-    pub memory_layout: HashMap<String, Range<usize>>,
+    pub memory: MemoryConfig,
+
     pub instruction: InstructionConfig,
 
     #[serde_as(as = "DefaultOnNull")]
@@ -71,12 +69,47 @@ pub struct MachineConfig {
     pub format: FormattingConfig,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Default, Clone)]
+pub struct MemoryConfig {
+    pub size: Option<usize>, // upper size limit for memory vector, None just lets it grow continuously
+    pub initial_size: Option<usize>,
+    #[serde(default)]
+    #[serde(deserialize_with = "deserialize_range_hashmap")]
+    pub layout: HashMap<Range<usize>, MemoryLayout>,
+}
+
+#[serde_as]
+#[derive(Deserialize, Debug, Clone)]
+pub struct MemoryLayout {
+    pub name: String,
+    #[serde(default)]
+    #[serde(deserialize_with = "deserialize_memory_permissions")]
+    pub permissions: MemoryLayoutPermissions,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct MemoryLayoutPermissions {
+    pub read: bool,
+    pub write: bool,
+    pub execute: bool,
+}
+
+impl Default for MemoryLayoutPermissions {
+    fn default() -> Self {
+        Self {
+            read: true,
+            write: true,
+            execute: true,
+        }
+    }
+}
+
+#[derive(Deserialize, Debug, Clone)]
 pub struct InstructionConfig {
     pub op_size: Option<usize>, // if None custom decoder will be enforced
 }
-
-#[derive(Deserialize, Debug, Default)]
+/*
+#[derive(Deserialize, Debug, Default, Clone)]
 #[serde_as]
 pub struct Register {
     #[serde(default)]
@@ -85,10 +118,82 @@ pub struct Register {
 
     #[serde(default)]
     #[serde_as(as = "DefaultOnNull")]
-    pub size: u8, // size in bits, max is sizeof(usize)
+    pub size: u8, // size in bytes, max is sizeof(usize)
+}
+*/
+
+#[derive(Debug, Clone, Default)]
+pub struct Register {
+    pub code: usize,
+    pub attribute: RegisterAttribute,
+    pub size: u8, // size in bytes, max is sizeof(usize)
+    pub write: bool,
 }
 
-#[derive(Deserialize, Debug, Default)]
+impl<'de> Deserialize<'de> for Register {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        #[serde_as]
+        enum Raw {
+            Simple(usize),
+            Complex {
+                code: Option<usize>,
+                #[serde(default)]
+                #[serde_as(as = "DefaultOnNull")]
+                attribute: RegisterAttribute,
+                #[serde(default = "default_1")]
+                #[serde_as(as = "DefaultOnNull")]
+                size: u8,
+                #[serde(default = "default_true")]
+                write: bool,
+            },
+        }
+
+        let res = Raw::deserialize(deserializer)?;
+
+        match res {
+            Raw::Complex {
+                attribute,
+                size,
+                write,
+                ..
+            } if attribute != RegisterAttribute::None => Ok(Register {
+                code: 0,
+                attribute,
+                size,
+                write,
+            }),
+            Raw::Complex {
+                code,
+                attribute,
+                size,
+                write,
+            } => {
+                if code.is_none() {
+                    panic!(
+                        "register.code must be present if register doesn't have a special attribute"
+                    )
+                }
+                Ok(Register {
+                    code: code.unwrap(),
+                    attribute,
+                    size,
+                    write,
+                })
+            }
+            Raw::Simple(code) => Ok(Register {
+                code,
+                ..Default::default()
+            }),
+        }
+    }
+}
+
+#[derive(Deserialize, Debug, Default, Clone, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum RegisterAttribute {
     #[default]
@@ -96,38 +201,6 @@ pub enum RegisterAttribute {
     Sp, // StackPointer
     Pc, // ProgramCounter
     Flags,
-}
-
-pub fn deserialize_range_hashmap<'de, D>(d: D) -> Result<HashMap<String, Range<usize>>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let opt: Option<HashMap<String, String>> = Option::<HashMap<String, String>>::deserialize(d)?;
-    if opt.is_none() {
-        return Ok(HashMap::default());
-    }
-
-    let map = opt.unwrap();
-    let mut res = HashMap::with_capacity(map.len());
-
-    for (key, val) in map {
-        let parts: Vec<usize> = val
-            .split("..")
-            .map(|x| x.parse::<usize>().unwrap())
-            .collect();
-        res.insert(
-            key,
-            Range {
-                start: parts[0],
-                end: *parts.get(1).unwrap_or(&usize::MAX),
-            },
-        );
-    }
-    return Ok(res);
-}
-
-pub fn default_true() -> bool {
-    true
 }
 
 /// A ParserArg populated with a value, to be passed onto arg handlers and prettifier
@@ -139,6 +212,8 @@ pub struct PopulatedArg {
     pub direction: ParserArgDirection,
     #[pyo3(item)]
     pub arg_val: Vec<u8>,
+    #[pyo3(item)]
+    pub memory_region: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -213,6 +288,7 @@ impl ParserArg {
             t: self.t,
             direction: self.direction,
             arg_val: b,
+            memory_region: None,
         })
     }
 }
@@ -239,7 +315,8 @@ pub struct DisFormatter {
     pub config: FormattingConfig,
 }
 
-#[derive(Clone, Default, FromPyObject)]
+#[pyclass(from_py_object, name="FormatterLine")]
+#[derive(Clone, Default)]
 pub struct DisFormatterLine {
     pub hex: String,
     pub opcode: String,
@@ -285,4 +362,102 @@ fn default_instruction_format() -> String {
 
 fn default_operand_separator() -> String {
     ",".to_owned()
+}
+
+fn deserialize_memory_permissions<'de, D>(d: D) -> Result<MemoryLayoutPermissions, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let opt: Option<String> = Option::<String>::deserialize(d)?;
+    if opt.is_none() {
+        return Ok(MemoryLayoutPermissions::default());
+    }
+
+    let perm_str = opt.unwrap();
+    let mut obj = MemoryLayoutPermissions {
+        read: false,
+        write: false,
+        execute: false,
+    };
+    for c in perm_str.chars() {
+        match c {
+            'r' => obj.read = true,
+            'x' => obj.execute = true,
+            'w' => obj.write = true,
+            _ => panic!(
+                "Non-permission char:  {}\nValid chars are 'w', 'r', and 'x'",
+                c
+            ),
+        }
+    }
+    Ok(obj)
+}
+
+pub fn deserialize_range_hashmap<'de, D>(
+    d: D,
+) -> Result<HashMap<Range<usize>, MemoryLayout>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let opt: Option<HashMap<String, MemoryLayout>> =
+        Option::<HashMap<String, MemoryLayout>>::deserialize(d)?;
+    if opt.is_none() {
+        return Ok(HashMap::default());
+    }
+
+    let map = opt.unwrap();
+    let mut res = HashMap::with_capacity(map.len());
+
+    for (key, val) in map {
+        let parts: Vec<usize> = key
+            .split("..")
+            .map(|x| x.parse::<usize>().unwrap())
+            .collect();
+        res.insert(
+            Range {
+                start: parts[0],
+                end: *parts.get(1).unwrap_or(&usize::MAX),
+            },
+            val,
+        );
+    }
+    return Ok(res);
+}
+
+pub fn default_true() -> bool {
+    true
+}
+
+pub fn default_1() -> u8 {
+    1u8
+}
+
+/* -------------------------------------- */
+
+#[pyclass(name = "emulator")]
+pub struct Emulator {
+    pub data: Bytes,
+    pub memory_config: MemoryConfig,
+    pub memory: Vec<u8>,
+    pub registers: HashMap<usize, EmuRegister>,
+    pub pc: EmuRegister,
+    pub sp: Option<EmuRegister>,
+    pub flags: Option<EmuRegister>,
+    pub ops: Arc<OpMap>, // this allows us to access the ops without transferring ownership
+}
+#[derive(Debug, Clone)]
+pub struct EmuRegister {
+    pub data: Bytes,
+    pub max_size: usize,
+    pub write: bool,
+}
+
+impl Default for EmuRegister {
+    fn default() -> Self {
+        EmuRegister {
+            data: Bytes::default(),
+            max_size: 1usize,
+            write: true,
+        }
+    }
 }

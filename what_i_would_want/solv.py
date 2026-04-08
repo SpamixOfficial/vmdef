@@ -16,6 +16,7 @@ m = machine.init(d="machine.json")#, i="machine.py")
 print(m.disassemble(data=data))
 
 # you are also able to set init state such as registers and memory
+# emulation will allocate and zero either config.initial_memory_size or 4096 bytes initially.
 em = m.create_emulation(data=data)
 
 # provide address (and callback, but that's optional, if no callback is provided you must unpause it manually after em.start() (if you dont do that in your callback))
@@ -24,7 +25,7 @@ em.set_breakpoint(0x100, callback_1)
 # (psst, this is a memory OFFSET, not ABSOLUTE ADDRESS! Use breakpoints for data-space!)
 em.set_watchpoint(0x1000, size=8) # remember to specify the correct address space!
 
-em.start()
+em.start() # this is blocking
 while True:
     if em.halted:
         break
