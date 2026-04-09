@@ -2,6 +2,9 @@
 
 vmDef is a python library and framework for defining, building and running emulators when solving VM-challenges in CTF:s.
 
+## Current state
+Emulation is very much in development, but disassembly is fully working.
+
 ## Features
 
 - Define your VM with **only 2 files**!
