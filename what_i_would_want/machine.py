@@ -2,100 +2,136 @@ from vmdef import define, ArgType
 
 
 d = define.init()
+stack = []
+
 
 def handle_str_load(_op, args):
-    args[1]["arg_val"] = bytes([args[1]["arg_val"][0]&0x7f, 0x0])
+    args[1]["arg_val"] = bytes([args[1]["arg_val"][0] & 0x7F, 0x0])
     return args
+
 
 # by default the args handler is the one you registered as the default
 # you can specify a custom one with the "arg_handler" parameter
 #
-# This declaration in itself is enough to disassemble the whole program. 
+# This declaration in itself is enough to disassemble the whole program.
 # In case you do not want any emulation you can simply set the function to "pass" or any other gibberisch (just know that it won't emulate the instruction!)
 @d.op(code=0x0, args=["rs2"])
-def push(args):
-    pass
+def push(state, args):
+    reg_val = state.get_register(int.from_bytes(args[0]["arg_val"], byteorder="little"))
+    stack.append(reg_val)
+    return state
+
+
 # a custom name can be passed with the name parameter
 @d.op(code=0x1, args=["rd2"], name="POP")
-def pop(args):
-    pass
+def pop(state, args):
+    state.set_register(
+        int.from_bytes(args[0]["arg_val"], byteorder="little"), stack.pop()
+    )
+    return state
+
+
 # r = register
 # d = destination
 # s = source
 # 1 = argument size (bytes)
 # Any opcode with RAD specified will update the internal statemachine during disassembly
 # the RAD parameter should be a valid eval, you can access your args through the `args` list
-@d.op(code=0x2, args=["rd2","rs2"], rad="args[0]=args[1]")
-def mov(args):
-    pass
+@d.op(code=0x2, args=["rd2", "rs2"], rad="args[0]=args[1]")
+def mov(state, args):
+    state.set_register(
+        int.from_bytes(args[0]["arg_val"], byteorder="little"),
+        state.get_register(int.from_bytes(args[1]["arg_val"], byteorder="little")),
+    )
+    return state
+
 
 # i = immediate
 # d = destination
 # s = source
 # 1 = argument size
 # this will set rd to is, eg "movi a, 0x1" will set a to 0x1 in the statemachine
-@d.op(code=0x3, args=["rd2","is2"], rad="args[0]=args[1]")
-def movi(args):
-    pass
+@d.op(code=0x3, args=["rd2", "is2"], rad="args[0]=args[1]")
+def movi(state, args):
+    state.set_register(
+        int.from_bytes(args[0]["arg_val"], byteorder="little"),
+        args[1]["arg_val"]
+    )
+    return state
+
 
 @d.op(code=4, args=["rd2", "ms2"], args_preprocess=handle_str_load)
-def load(args):
+def load(state, args):
     pass
+
 
 @d.op(code=5, args=["md2", "rs2"], name="STR", args_preprocess=handle_str_load)
-def store(args):
+def store(state, args):
     pass
+
 
 @d.op(code=6, args=["rd2", "rs2"])
-def add(args):
+def add(state, args):
     pass
+
 
 @d.op(code=7, args=["rd2", "rs2"])
-def sub(args):
+def sub(state, args):
     pass
+
 
 @d.op(code=8, args=["rd2", "rs2"], name="AND")
-def and_(args):
+def and_(state, args):
     pass
+
 
 @d.op(code=9, args=["rd2", "rs2"], name="OR")
-def or_(args):
+def or_(state, args):
     pass
+
 
 @d.op(code=10, args=["rd2", "rs2"])
-def xor(args):
+def xor(state, args):
     pass
+
 
 @d.op(code=11, args=["rd2", "rs2"])
-def shl(args):
+def shl(state, args):
     pass
+
 
 @d.op(code=12, args=["rs2", "rs2"])
-def cmp(args):
+def cmp(state, args):
     pass
+
 
 @d.op(code=13, args=["rs2"])
-def jmp(args):
+def jmp(state, args):
     pass
+
 
 @d.op(code=14, args=["is2"])
-def je(args):
+def je(state, args):
     pass
+
 
 @d.op(code=15, args=["is2"])
-def jne(args):
+def jne(state, args):
     pass
 
+
 @d.op(code=255)
-def halt(args):
+def halt(state, args):
     pass
+
 
 # args will be the argspecifier from the args parameter above, but parsed by the library to give you a dictionary along with necessary data (check docs)
 # should return a dictionary object like specified in the docs, emulator/RAD will process it accordingly
 # buffer increments are not necessary since we already know the whole instruction length (cause you declared it correctly, right?)
-#@d.arg_handler
-#def arg_handler(args):
+# @d.arg_handler
+# def arg_handler(args):
 #    pass
+
 
 # this is only used during disassembly, and it is completely optional!
 # NOTE: only one formatter can be defined, so make sure it is extensive!
@@ -115,10 +151,10 @@ def arg_prettifier(args, rad_state):
             case ArgType.Memory:
                 r = format_register(v)
                 rad_v = int.from_bytes(rad_state[v], byteorder="little")
-                if v&0x80 == 0:
-                    if rad_v == 0xfe:
+                if v & 0x80 == 0:
+                    if rad_v == 0xFE:
                         res.append(f"[mmi]")
-                    elif rad_v == 0xff:
+                    elif rad_v == 0xFF:
                         res.append(f"[mmo]")
                     else:
                         res.append(f"[{r}]")

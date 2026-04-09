@@ -14,4 +14,5 @@
 - [ ] Clean up project structure, types are a mess right now
 - [ ] Create shared function for instruction decoding
     - [ ] Deduplication of code overall
-- [ ] Rewrite Emulator structure to resolve current pointer hell
+- [ ] Rewrite Emulator structure to resolve current pointer hell and messy structure
+- [ ] Improve docs

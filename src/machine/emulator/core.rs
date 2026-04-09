@@ -4,14 +4,13 @@ use pyo3::{Py, PyRef, PyRefMut, Python, ffi::PyObject};
 
 use crate::{
     buf_as_usize, function, option_to_res,
-    types::{Emulator, EmulatorCore, OpHandler, ParserArgType, PopulatedArg},
+    types::{EmuWatchpoint, Emulator, EmulatorState, OpHandler, ParserArgType, PopulatedArg},
 };
-use std::cmp::min;
+use std::{cmp::min, ops::Range};
 
 impl Emulator {
     pub fn get_opcode_args(
         &self,
-        state: &PyRef<'_, EmulatorCore>,
         op: usize,
         op_item: &OpHandler,
     ) -> Result<(usize, Vec<PopulatedArg>)> {
@@ -19,7 +18,7 @@ impl Emulator {
         let mut populated_args: Vec<PopulatedArg> = vec![];
 
         for arg in &op_item.parser_args {
-            let mut p_arg = arg.populate(&state.data, len)?;
+            let mut p_arg = arg.populate(&self.state.data, len)?;
 
             if p_arg.t == ParserArgType::Memory && !self.machine_config.memory.layout.is_empty() {
                 for (r, v) in &self.machine_config.memory.layout {
@@ -45,10 +44,34 @@ impl Emulator {
         Ok((len, populated_args))
     }
 
-    pub fn execute_next_instruction(&self, py: Python<'_>) -> Result<()> {
-        let state = self.state.bind(py).borrow();
+    fn get_breakpoints_at_addr(&self, addr: usize) -> Vec<usize> {
+        self.breakpoints
+            .iter()
+            .filter_map(|(k, v)| (v.address == addr).then(|| k.clone()))
+            .collect()
+    }
 
-        let mut op = buf_as_usize!(state.data, self.op_size);
+    fn get_watchpoints_at_addr(&self, addr: usize) -> Vec<usize> {
+        self.breakpoints
+            .iter()
+            .filter_map(|(k, v)| {
+                ((v.address..v.address + v.size).contains(&addr)).then(|| k.clone())
+            })
+            .collect()
+    }
+
+    fn handle_watchpoints_breakpoints(&mut self, addr: usize) {
+        let breakpoints = self.get_breakpoints_at_addr(addr);
+
+        for breakpoint in breakpoints {
+            
+        }
+
+        let watchpoints = self.get_watchpoints_at_addr(addr);
+    }
+
+    pub fn execute_at(&mut self, pc: usize) -> Result<usize> {
+        let mut op = buf_as_usize!(self.state.data[pc..], self.op_size);
 
         if !self.machine_config.little_endian {
             op = op.swap_bytes();
@@ -56,41 +79,36 @@ impl Emulator {
 
         let op_item = option_to_res!(self.ops.get(&op), "opcode {} not found", op)?;
 
-        let (len, args) = self.get_opcode_args(&state, op, op_item)?;
+        let (len, args) = self.get_opcode_args(op, op_item)?;
 
-        op_item.execute_func(self.state.clone_ref(py), args)?;
+        self.state = op_item.execute_func(self.state.clone(), args)?;
 
-        let mut pc_val = buf_as_usize!(state.pc.data);
-
-        if !self.machine_config.little_endian {
-            pc_val = pc_val.swap_bytes();
-        }
-
-        pc_val += len + self.op_size;
-
-        if pc_val >= state.data.len() {
-            return Err(anyhow!(
-                "ERROR: pc register is out of bounds:  {} >= {}",
-                pc_val,
-                state.data.len()
-            ));
-        }
-
-        let mut state = self.state.bind(py).borrow_mut();
-
-        state.pc.data = Bytes::from(Vec::from(pc_val.swap_bytes().to_le_bytes()));
-
-        Ok(())
+        Ok(len + self.op_size)
     }
 
-    pub fn run(&mut self, py: Python<'_>) -> Result<()> {
-        let state = self.state.bind(py).borrow();
+    pub fn run(&mut self) -> Result<()> {
         loop {
-            self.execute_next_instruction(py)?;
+            let mut pc_val = buf_as_usize!(self.state.pc.data);
 
-            if state.paused || state.halted {
+            //self.handle_watchpoints_breakpoints(pc_val);
+
+            let instr_len = self.execute_at(pc_val)?;
+
+            if self.state.paused || self.state.halted {
                 break;
             }
+
+            pc_val += instr_len;
+            if pc_val >= self.state.data.len() {
+                eprintln!(
+                    "Program reached end (pc register is out of bounds: {} >= {}), stopping automatically",
+                    pc_val,
+                    self.state.data.len()
+                );
+                self.state.halted = true;
+                break;
+            }
+            self.state.pc.data = Bytes::from(Vec::from(pc_val.to_le_bytes()));
         }
 
         Ok(())

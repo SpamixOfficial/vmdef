@@ -15,7 +15,7 @@ use crate::{
     function, option_to_res,
     pydefine::PyDefine,
     types::{
-        ArgFormatter, Define, DisFormatter, DisFormatterLine, Disassembler, EmuRegister, Emulator, EmulatorCore, Machine, MachineConfig, OpMap, RadState, RegisterAttribute
+        ArgFormatter, Define, DisFormatter, DisFormatterLine, Disassembler, EmuRegister, Emulator, EmulatorState, Machine, MachineConfig, OpMap, RadState, RegisterAttribute
     },
 };
 
@@ -187,7 +187,7 @@ impl Machine {
                 size_of::<usize>()
             ))?;
         }
-        let state = EmulatorCore {
+        let state = EmulatorState {
             halted: false,
             paused: false,
             //started: false,
@@ -199,7 +199,7 @@ impl Machine {
             pc: pc.unwrap(),
             sp,
             flags,
-        }.into_pyobject(py)?.unbind();
+        };
         
         let emu = Emulator {
             op_size,

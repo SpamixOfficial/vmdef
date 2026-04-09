@@ -1,9 +1,10 @@
 use anyhow::anyhow;
+use bytes::Bytes;
 use pyo3::{Py, PyRefMut, PyResult, Python, pymethods, types::PyFunction};
 
 use crate::{
     function,
-    types::{EmuWatchpoint, Emulator},
+    types::{EmuWatchpoint, Emulator, EmulatorState},
 };
 
 #[pymethods]
@@ -71,8 +72,8 @@ impl Emulator {
         self.watchpoints.remove(&id);
     }
 
-    pub fn start(&mut self, py: Python<'_>) -> PyResult<()> {
-        self.run(py)?;
+    pub fn start(&mut self) -> PyResult<()> {
+        self.run()?;
         Ok(())
     }
 
@@ -84,19 +85,41 @@ impl Emulator {
         Ok(())
     }
 
-    pub fn unpause(&mut self, py: Python<'_>) -> PyResult<()> {
-        let state = self.state.bind(py).borrow();
-        if !state.paused {
+    pub fn unpause(&mut self) -> PyResult<()> {
+        if !self.state.paused {
             Err(anyhow!(
                 "{} - Cannot unpause the emulator if it isn't paused",
                 function!()
             ))?;
-        } else if state.halted {
+        } else if self.state.halted {
             Err(anyhow!(
                 "{} - Cannot unpause the emulator if it's halted (there's nothing to run!)",
                 function!()
             ))?;
         }
         Ok(())
+    }
+}
+
+#[pymethods]
+impl EmulatorState {
+    #[pyo3(signature = (reg, val))]
+    pub fn set_register(&mut self, reg: usize, val: Vec<u8>) -> PyResult<()> {
+        let ereg = self
+            .registers
+            .get_mut(&reg)
+            .ok_or(anyhow!("No such register: {}", reg))?;
+        ereg.data = Bytes::from(val);
+
+        Ok(())
+    }
+
+    #[pyo3(signature = (reg))]
+    pub fn get_register(&self, reg: usize) -> PyResult<Vec<u8>> {
+        let ereg = self
+            .registers
+            .get(&reg)
+            .ok_or(anyhow!("No such register: {}", reg))?;
+        Ok(ereg.data.to_vec())
     }
 }

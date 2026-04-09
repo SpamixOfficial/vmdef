@@ -433,7 +433,8 @@ pub fn default_1() -> u8 {
 
 #[pyclass(name = "emulator")]
 pub struct Emulator {
-    pub state: Py<EmulatorCore>,
+    #[pyo3(get)]
+    pub state: EmulatorState,
 
     // --- State --- //
     /*pub data: Bytes,
@@ -465,16 +466,20 @@ pub struct Emulator {
     pub breakpoints_id: usize,
 }
 
-#[pyclass]
-pub struct EmulatorCore {
+#[pyclass(from_py_object)]
+#[derive(Clone, Debug)]
+pub struct EmulatorState {
     // --- State --- //
     pub data: Bytes,
 
-    #[pyo3(get)]
+    #[pyo3(get, set)]
     pub memory: Vec<u8>,
     pub registers: HashMap<usize, EmuRegister>,
+    #[pyo3(get)]
     pub pc: EmuRegister,
+    #[pyo3(get)]
     pub sp: Option<EmuRegister>,
+    #[pyo3(get)]
     pub flags: Option<EmuRegister>,
 
     // --- Status --- //

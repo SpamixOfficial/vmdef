@@ -1,11 +1,10 @@
 # you should not HAVE to use a solve script to interact with it, a CLI should also be available
 from vmdef import machine
 
-def callback_1(em):
+def callback_1(state):
     # do something...
-    a = 1 + em.get_register("a")
+    a = 1 + state.get_register("a")
     print(a)
-    em.unpause() # will check for em.halted by itself. Only reason we do it in the loop down below is to check if we should stop the loop
 
 
 data = open("vmdata.bin", "rb").read()
@@ -14,6 +13,8 @@ data = open("vmdata.bin", "rb").read()
 m = machine.init(d="machine.json")#, i="machine.py")
 
 print(m.disassemble(data=data))
+
+# For reviewers: Everything following this line is purely WIP, please ignore!
 
 # you are also able to set init state such as registers and memory
 # emulation will allocate and zero either config.initial_memory_size or 4096 bytes initially.
@@ -27,7 +28,7 @@ em.set_watchpoint(0x1000, size=8)
 
 em.start() # this is blocking
 while True:
-    if em.halted:
+    if em.state.halted:
         break
-    print(em.memory)
+    print(em.state.memory)
     em.unpause() # this is also blocking

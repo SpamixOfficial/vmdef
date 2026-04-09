@@ -1,25 +1,26 @@
 use std::collections::HashMap;
 
 use anyhow::{Result, anyhow};
-use pyo3::{Py, PyRefMut, Python};
+use pyo3::Python;
 
 use crate::{
     function,
-    types::{ArgFormatter, EmulatorCore, OpHandler, PopulatedArg},
+    types::{ArgFormatter, EmulatorState, OpHandler, PopulatedArg},
     unwrap_or,
 };
 
 impl OpHandler {
-    pub fn execute_func(&self, emu_state: Py<EmulatorCore>, args: Vec<PopulatedArg>) -> Result<()> {
-        unwrap_or!(
-            Python::try_attach(|py| -> Result<()> {
-                self.func.call(py, (emu_state, args), None)?;
-                Ok(())
+    pub fn execute_func(
+        &self,
+        emu_state: EmulatorState,
+        args: Vec<PopulatedArg>,
+    ) -> Result<EmulatorState> {
+        Ok(unwrap_or!(
+            Python::try_attach(|py| -> Result<EmulatorState> {
+                self.func.call(py, (emu_state, args), None)?.extract(py).or_else(|x| Err(anyhow!("Opcode implementation returned None:\n{}\nTip: make sure all your implementations return a valid state!", x)))
             }),
             "could not attach to python interpreter"
-        )?;
-
-        Ok(())
+        )?)
     }
 }
 
@@ -35,10 +36,14 @@ impl OpHandler {
 }*/
 
 impl ArgFormatter {
-    pub fn execute(&self, inp: Vec<PopulatedArg>, rad_state: HashMap<usize, Vec<u8>>) -> Result<Vec<String>> {
+    pub fn execute(
+        &self,
+        inp: Vec<PopulatedArg>,
+        rad_state: HashMap<usize, Vec<u8>>,
+    ) -> Result<Vec<String>> {
         unwrap_or!(
             Python::try_attach(|py| -> Result<Vec<String>> {
-                let res: Vec<String> = self.0.call(py, (inp,rad_state), None)?.extract(py)?;
+                let res: Vec<String> = self.0.call(py, (inp, rad_state), None)?.extract(py)?;
                 Ok(res)
             }),
             "could not attach to python interpreter"
