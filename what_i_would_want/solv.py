@@ -14,6 +14,7 @@ m = machine.init(d="machine.json")#, i="machine.py")
 
 print(m.disassemble(data=data))
 
+exit(0)
 # For reviewers: Everything following this line is purely WIP, please ignore!
 
 # you are also able to set init state such as registers and memory
