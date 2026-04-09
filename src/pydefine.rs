@@ -54,6 +54,14 @@ impl PyDefine {
         })
     }
 
+    /*pub fn disassembler(slf: Py<Self>, func: Py<PyFunction>) -> PyResult<Py<PyFunction>> {
+        Python::attach(|py| -> PyResult<Py<PyFunction>> {
+            let mut s = slf.borrow_mut(py);
+            s.arg_formatter = Some(ArgFormatter(func.clone_ref(py)));
+            Ok(func)
+        })
+    }*/
+
     /*pub fn arg_handler(slf: Py<Self>, func: Py<PyFunction>) -> PyResult<Py<PyFunction>> {
         Python::attach(|py| -> PyResult<Py<PyFunction>> {
             let mut s = slf.borrow_mut(py);

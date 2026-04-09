@@ -1,19 +1,19 @@
 use std::collections::HashMap;
 
 use anyhow::{Result, anyhow};
-use pyo3::{Py, PyAny, Python};
+use pyo3::{Py, PyRefMut, Python};
 
 use crate::{
     function,
-    types::{ArgFormatter, OpHandler, PopulatedArg},
+    types::{ArgFormatter, EmulatorCore, OpHandler, PopulatedArg},
     unwrap_or,
 };
 
 impl OpHandler {
-    pub fn execute_func(&self, args: Py<PyAny>) -> Result<()> {
+    pub fn execute_func(&self, emu_state: Py<EmulatorCore>, args: Vec<PopulatedArg>) -> Result<()> {
         unwrap_or!(
             Python::try_attach(|py| -> Result<()> {
-                self.func.call(py, (args,), None)?;
+                self.func.call(py, (emu_state, args), None)?;
                 Ok(())
             }),
             "could not attach to python interpreter"

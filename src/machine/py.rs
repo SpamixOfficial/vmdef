@@ -8,18 +8,14 @@ use std::{
 
 use bytes::Bytes;
 use pyo3::{
-    Bound, PyResult, Python,
-    exceptions::PyException,
-    pymethods,
-    types::{PyAnyMethods, PyModule},
+    Bound, IntoPyObject, IntoPyObjectExt, PyResult, Python, exceptions::PyException, pymethods, types::{PyAnyMethods, PyModule}, Py
 };
 
 use crate::{
     function, option_to_res,
     pydefine::PyDefine,
     types::{
-        ArgFormatter, Define, DisFormatter, DisFormatterLine, Disassembler, EmuRegister, Emulator,
-        Machine, MachineConfig, OpMap, RadState, RegisterAttribute,
+        ArgFormatter, Define, DisFormatter, DisFormatterLine, Disassembler, EmuRegister, Emulator, EmulatorCore, Machine, MachineConfig, OpMap, RadState, RegisterAttribute
     },
 };
 
@@ -106,6 +102,7 @@ impl Machine {
     #[pyo3(signature = (data, registers=None, memory=None))]
     pub fn create_emulation(
         &self,
+        py: Python<'_>,
         data: Vec<u8>,
         registers: Option<HashMap<String, Vec<u8>>>,
         memory: Option<Vec<u8>>,
@@ -160,6 +157,7 @@ impl Machine {
                 }
 
                 let emu_reg = EmuRegister {
+                    name: reg.0,
                     data: Bytes::from(reg.1),
                     max_size: reg_info.size as usize,
                     write: reg_info.write,
@@ -176,18 +174,55 @@ impl Machine {
             }
         }
 
-        Ok(Emulator {
+        let op_size = self.config.instruction.op_size.ok_or(anyhow!(
+            "{} - Operator size must be known for emulator runtime",
+            function!()
+        ))?;
+
+        if op_size > size_of::<usize>() {
+            Err(anyhow!(
+                "{} - op_size ({} bytes) was bigger than max size of {} bytes",
+                function!(),
+                op_size,
+                size_of::<usize>()
+            ))?;
+        }
+        let state = EmulatorCore {
             halted: false,
+            paused: false,
+            //started: false,
+
             data: Bytes::from(data),
-            memory_config: self.config.memory.clone(),
+
             memory,
             registers: emu_registers,
             pc: pc.unwrap(),
             sp,
             flags,
+        }.into_pyobject(py)?.unbind();
+        
+        let emu = Emulator {
+            op_size,
+            state,
+            /*halted: false,
+            paused: false,
+            started: false,
+
+            data: Bytes::from(data),
+
+            memory,
+            registers: emu_registers,
+            pc: pc.unwrap(),
+            sp,
+            flags,*/
+            machine_config: self.config.clone(),
             ops: self.define.ops.clone(),
             breakpoints: HashMap::new(),
-            watchpoints: HashMap::new()
-        })
+            breakpoints_id: 0,
+            watchpoints: HashMap::new(),
+            watchpoints_id: 0,
+        };
+
+        Ok(emu)
     }
 }

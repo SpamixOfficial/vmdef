@@ -1,4 +1,4 @@
-use std::{cmp::min, collections::HashMap, ffi::CString, process::exit};
+use std::{cmp::min, collections::HashMap, ffi::CString, process::exit, sync::Arc};
 
 use anyhow::{Result, anyhow};
 use bytes::{Buf, Bytes};
@@ -9,7 +9,7 @@ use pyo3::{
 
 use crate::{
     buf_as_usize, function, log_if_verbose, option_to_res,
-    types::{DisFormatterLine, Machine, ParserArgDirection, ParserArgType, PopulatedArg, RadState},
+    types::{DisFormatterLine, Instruction, Machine, MachineConfig, OpMap, ParserArgDirection, ParserArgType, PopulatedArg, RadState},
 };
 
 macro_rules! rad_error {
@@ -163,7 +163,7 @@ impl Machine {
                 }
                 Err((e, l)) => {
                     log_if_verbose!(self.config.verbose, "WARNING - {}", e.to_string());
-                    
+
                     if e.to_string() == "KeyboardInterrupt: " {
                         exit(1);
                     }

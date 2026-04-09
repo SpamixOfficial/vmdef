@@ -23,11 +23,11 @@ em = m.create_emulation(data=data)
 em.set_breakpoint(0x100, callback_1)
 # size is 1 byte by default
 # (psst, this is a memory address, use breakpoints for data-space!)
-em.set_watchpoint(0x1000, size=8) # remember to specify the correct address space!
+em.set_watchpoint(0x1000, size=8)
 
 em.start() # this is blocking
 while True:
     if em.halted:
         break
     print(em.memory)
-    em.unpause()
+    em.unpause() # this is also blocking

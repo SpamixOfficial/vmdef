@@ -1,9 +1,18 @@
 use anyhow::{Result, anyhow};
 use bytes::{Buf, Bytes};
-use pyo3::{FromPyObject, IntoPyObject, Py, pyclass, types::PyFunction};
+use pyo3::{
+    Bound, FromPyObject, IntoPyObject, Py, PyAny, PyErr, PyResult, Python, pyclass,
+    types::{PyAnyMethods, PyBytes, PyDict, PyFunction},
+};
 use serde::{Deserialize, Deserializer};
 use serde_with::{DefaultOnNull, serde_as};
-use std::{collections::HashMap, ops::Range, path::PathBuf, sync::{Arc, Mutex}};
+use std::{
+    borrow::Cow,
+    collections::HashMap,
+    ops::Range,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
 
 pub type OpMap = HashMap<usize, OpHandler>;
 
@@ -23,7 +32,8 @@ pub struct Define {
     pub ops: Arc<OpMap>,
     //pub arg_handler: Option<ArgHandler>,
     pub arg_formatter: Option<ArgFormatter>,
-    pub disassembler: Option<Disassembler>, //pub primary_args_handler: String,
+    pub disassembler: Option<Disassembler>,
+    //pub primary_args_handler: String,
 }
 
 /*#[derive(Debug)]
@@ -302,7 +312,7 @@ pub struct DisFormatter {
     pub config: FormattingConfig,
 }
 
-#[pyclass(from_py_object, name="FormatterLine")]
+#[pyclass(from_py_object, name = "FormatterLine")]
 #[derive(Clone, Default)]
 pub struct DisFormatterLine {
     pub hex: String,
@@ -423,36 +433,91 @@ pub fn default_1() -> u8 {
 
 #[pyclass(name = "emulator")]
 pub struct Emulator {
-    // --- Status --- //
-    pub halted: bool,
-    // --- Data --- //
-    pub data: Bytes,
-    pub memory_config: MemoryConfig,
+    pub state: Py<EmulatorCore>,
+
+    // --- State --- //
+    /*pub data: Bytes,
+
+    #[pyo3(get)]
     pub memory: Vec<u8>,
     pub registers: HashMap<usize, EmuRegister>,
     pub pc: EmuRegister,
     pub sp: Option<EmuRegister>,
     pub flags: Option<EmuRegister>,
+
+    // --- Status --- //
+    #[pyo3(get)]
+    pub halted: bool,
+    #[pyo3(get)]
+    pub paused: bool,
+    #[pyo3(get)]
+    pub started: bool,
+*/
+    // --- Config stuff --- //
+    pub machine_config: MachineConfig,
     pub ops: Arc<OpMap>, // this allows us to access the ops without transferring ownership
-    
+    pub op_size: usize,
+
     // --- Runtime Stuff --- //
-    pub watchpoints: HashMap<Range<usize>, Option<Py<PyFunction>>>, // start..start+size
-    pub breakpoints: HashMap<usize, Option<Py<PyFunction>>>
+    pub watchpoints: HashMap<usize, EmuWatchpoint>,
+    pub watchpoints_id: usize,
+    pub breakpoints: HashMap<usize, EmuWatchpoint>,
+    pub breakpoints_id: usize,
 }
 
-#[derive(Debug, Clone)]
+#[pyclass]
+pub struct EmulatorCore {
+    // --- State --- //
+    pub data: Bytes,
+
+    #[pyo3(get)]
+    pub memory: Vec<u8>,
+    pub registers: HashMap<usize, EmuRegister>,
+    pub pc: EmuRegister,
+    pub sp: Option<EmuRegister>,
+    pub flags: Option<EmuRegister>,
+
+    // --- Status --- //
+    #[pyo3(get)]
+    pub halted: bool,
+    #[pyo3(get)]
+    pub paused: bool,
+    /*#[pyo3(get)]
+    pub started: bool,*/
+}
+#[derive(Debug, Default)]
+pub struct EmuWatchpoint {
+    pub address: usize,
+    pub size: usize,
+    pub callback: Option<Py<PyFunction>>,
+    pub hit: usize,
+    pub disabled: bool,
+}
+
+#[derive(Debug, Clone, IntoPyObject)]
 pub struct EmuRegister {
+    pub name: String,
+    #[pyo3(into_py_with = bytes_into_pyobject)]
     pub data: Bytes,
     pub max_size: usize,
     pub write: bool,
 }
 
+fn bytes_into_pyobject<'py>(b: Cow<'_, Bytes>, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+    Ok(PyBytes::new(py, &b).into_any())
+}
+
 impl Default for EmuRegister {
     fn default() -> Self {
         EmuRegister {
+            name: String::new(),
             data: Bytes::default(),
             max_size: 1usize,
             write: true,
         }
     }
+}
+
+pub struct Instruction {
+    op_item: Arc<OpHandler>,
 }
